@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: algolens-backend/package-lock.json
 
       - name: Install Backend Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run Backend TypeScript Check
         run: npx tsc --noEmit
