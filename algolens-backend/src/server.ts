@@ -3,9 +3,8 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 
-// Note: dotenv is loaded by bootstrap.ts BEFORE this module is imported.
-// Do NOT add dotenv.config() here — ESM import hoisting would run service
-// constructors before it executes anyway.
+import { config as dotenvConfig } from 'dotenv';
+dotenvConfig();
 
 // Import Routes
 import healthRouter from './routes/health.routes.js';

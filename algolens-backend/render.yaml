@@ -12,8 +12,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 5000
       - key: CORS_ORIGIN
         value: https://algolens.vercel.app,http://localhost:3000
       - key: GROQ_MODEL
