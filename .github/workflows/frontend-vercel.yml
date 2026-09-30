@@ -1,0 +1,60 @@
+name: Frontend Vercel CD
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'algolens-frontend/**'
+      - '.github/workflows/frontend-vercel.yml'
+      - 'vercel.json'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'algolens-frontend/**'
+      - '.github/workflows/frontend-vercel.yml'
+      - 'vercel.json'
+  workflow_dispatch:
+
+jobs:
+  deploy-vercel:
+    name: Build & Deploy Frontend to Vercel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: algolens-frontend
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: algolens-frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Verify TypeScript & Build
+        run: npx tsc --noEmit
+
+      # Deploy using official Vercel CLI action
+      - name: Deploy to Vercel (Preview or Production)
+        uses: amondnet/vercel-action@v25
+        id: vercel-deployment
+        if: env.VERCEL_TOKEN != ''
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+          working-directory: ./algolens-frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Post Deployment Status
+        if: steps.vercel-deployment.outputs.vercel-preview-url != ''
+        run: |
+          echo "Vercel Deployment URL: ${{ steps.vercel-deployment.outputs.vercel-preview-url }}"

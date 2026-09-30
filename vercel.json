@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "rootDirectory": "algolens-frontend",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install"
+}
