@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+
+# TypeScript Cache
+*.tsbuildinfo
+
+# Environment & Secrets (Never commit database passwords or Groq/Supabase keys)
+.env
+.env.*
+!.env.example
+
+# Debug Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

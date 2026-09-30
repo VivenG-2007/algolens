@@ -1,0 +1,48 @@
+{
+  "name": "algolens-backend",
+  "version": "1.0.0",
+  "description": "AlgoLens Execution Engine & REST API Backend",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/bootstrap.ts",
+    "build": "tsc",
+    "start": "node dist/bootstrap.js",
+    "test": "jest",
+    "load-test": "node scripts/loadTest.js"
+  },
+  "keywords": [
+    "dsa",
+    "algorithms",
+    "visualization",
+    "execution-trace",
+    "groq",
+    "supabase",
+    "redis"
+  ],
+  "author": "AlgoLens Team",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
+    "@upstash/redis": "^1.39.0",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.4",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "groq-sdk": "^1.6.0",
+    "helmet": "^8.3.0",
+    "ioredis": "^5.4.1",
+    "neo4j-driver": "^6.2.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^29.5.13",
+    "@types/node": "^26.6.3",
+    "autocannon": "^8.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

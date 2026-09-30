@@ -1,0 +1,81 @@
+# ==============================================================================
+# AlgoLens Monorepo Root .gitignore
+# ==============================================================================
+
+# Dependencies
+node_modules/
+*/node_modules/
+.pnp
+.pnp.js
+
+# Production & Build outputs
+.next/
+*/.next/
+dist/
+*/dist/
+out/
+*/out/
+build/
+*/build/
+
+# TypeScript Build Info Cache
+*.tsbuildinfo
+*/*.tsbuildinfo
+
+# Environment & Secret files (CRITICAL: Never commit live credentials)
+.env
+.env.*
+!.env.example
+!*/.env.example
+*/.env
+*/.env.*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Next.js & Turbopack telemetry / build caches
+.turbo/
+*/.turbo/
+.vercel/
+*/.vercel/
+
+# Testing & Coverage
+coverage/
+*/coverage/
+.nyc_output/
+
+# Operating System & Editor Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# IDE & Editor Settings
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.bak
+*~
+
+# Temporary scratch scripts & caches
+scratch/
+tmp/
+temp/
