@@ -22,6 +22,8 @@ interface AITutorDrawerProps {
   nextStep?: ExecutionStep;
   code?: string;
   pseudocode?: string;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
@@ -31,8 +33,22 @@ export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
   nextStep,
   code,
   pseudocode,
+  isOpen: isOpenProp,
+  onOpenChange,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = isOpenProp !== undefined ? isOpenProp : internalOpen;
+
+  const handleOpen = () => {
+    if (isOpenProp === undefined) setInternalOpen(true);
+    onOpenChange?.(true);
+  };
+
+  const handleClose = () => {
+    if (isOpenProp === undefined) setInternalOpen(false);
+    onOpenChange?.(false);
+  };
+
   const [customQuestion, setCustomQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [explanation, setExplanation] = useState<string | null>(null);
@@ -86,8 +102,9 @@ export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
       {/* Floating Launcher Button */}
       <button
         type="button"
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-accent-indigo to-brand-600 hover:from-accent-indigo/90 hover:to-brand-500 text-white rounded-full shadow-glow font-medium text-sm transition transform hover:scale-105"
+        onClick={handleOpen}
+        aria-label="Open AI Tutor Chatbot"
+        className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-accent-indigo to-brand-600 hover:from-accent-indigo/90 hover:to-brand-500 text-white rounded-full shadow-glow font-medium text-sm transition transform hover:scale-105 min-h-[44px]"
       >
         <Bot className="w-5 h-5 text-accent-cyan" />
         <span>Ask AI Tutor</span>
@@ -103,7 +120,7 @@ export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
+              onClick={handleClose}
               className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
             />
 
@@ -137,8 +154,9 @@ export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setIsOpen(false)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
+                    onClick={handleClose}
+                    aria-label="Close AI Tutor Chatbot"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition min-h-[40px] min-w-[40px] flex items-center justify-center"
                   >
                     <X className="w-5 h-5" />
                   </button>

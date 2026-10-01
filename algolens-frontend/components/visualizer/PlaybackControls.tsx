@@ -15,6 +15,8 @@ interface PlaybackControlsProps {
   totalSteps: number;
   onStepChange: (step: number | ((prev: number) => number)) => void;
   isLoading?: boolean;
+  isPlaying?: boolean;
+  onIsPlayingChange?: (playing: boolean) => void;
 }
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
@@ -22,8 +24,20 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   totalSteps,
   onStepChange,
   isLoading = false,
+  isPlaying: isPlayingProp,
+  onIsPlayingChange,
 }) => {
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [internalPlaying, setInternalPlaying] = useState<boolean>(false);
+  const isPlaying = isPlayingProp !== undefined ? isPlayingProp : internalPlaying;
+
+  const setIsPlaying = (val: boolean | ((prev: boolean) => boolean)) => {
+    const nextVal = typeof val === 'function' ? val(isPlaying) : val;
+    if (isPlayingProp === undefined) {
+      setInternalPlaying(nextVal);
+    }
+    onIsPlayingChange?.(nextVal);
+  };
+
   const [speed, setSpeed] = useState<number>(1800); // ms per step (Slower, highly explanatory)
 
   // Auto-play interval
@@ -96,17 +110,19 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             onStepChange(Number(e.target.value));
           }}
           disabled={isLoading || totalSteps <= 1}
+          aria-label="Algorithm playback progress scrubber"
           className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-brand-500 disabled:opacity-50"
         />
       </div>
 
       {/* Buttons */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         <button
           type="button"
           onClick={handleReset}
           disabled={isLoading || isAtStart}
-          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed"
+          aria-label="Reset to beginning"
+          className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed min-h-[44px] min-w-[44px] flex items-center justify-center"
           title="Reset to beginning"
         >
           <RotateCcw className="w-4 h-4" />
@@ -116,7 +132,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           type="button"
           onClick={handlePrev}
           disabled={isLoading || isAtStart}
-          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed"
+          aria-label="Previous step"
+          className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed min-h-[44px] min-w-[44px] flex items-center justify-center"
           title="Previous step"
         >
           <SkipBack className="w-4 h-4" />
@@ -126,7 +143,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           type="button"
           onClick={() => setIsPlaying(!isPlaying)}
           disabled={isLoading || isAtEnd}
-          className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition shadow-glow flex items-center gap-1.5 font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label={isPlaying ? 'Pause playback' : 'Play algorithm step-by-step'}
+          className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition shadow-glow flex items-center gap-1.5 font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px]"
           title={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
@@ -146,7 +164,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           type="button"
           onClick={handleNext}
           disabled={isLoading || isAtEnd}
-          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed"
+          aria-label="Next step"
+          className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed min-h-[44px] min-w-[44px] flex items-center justify-center"
           title="Next step"
         >
           <SkipForward className="w-4 h-4" />
@@ -156,7 +175,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           type="button"
           onClick={handleJumpToEnd}
           disabled={isLoading || isAtEnd}
-          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed"
+          aria-label="Jump to final sorted step"
+          className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed min-h-[44px] min-w-[44px] flex items-center justify-center"
           title="Jump to end"
         >
           <FastForward className="w-4 h-4" />
@@ -165,12 +185,14 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
       {/* Speed Selector */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-400 font-mono">Speed:</span>
+        <label htmlFor="playback-speed-select" className="text-xs text-slate-400 font-mono">Speed:</label>
         <select
+          id="playback-speed-select"
           value={speed}
           onChange={(e) => setSpeed(Number(e.target.value))}
           disabled={isLoading}
-          className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 font-mono focus:border-brand-500 focus:outline-none"
+          aria-label="Playback speed selector"
+          className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-200 font-mono focus:border-brand-500 focus:outline-none min-h-[44px]"
         >
           <option value={3000}>0.3x (Super Slow & Explanatory)</option>
           <option value={1800}>0.5x (Slow - Recommended)</option>

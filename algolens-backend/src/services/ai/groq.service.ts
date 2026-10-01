@@ -102,6 +102,7 @@ Student Question: ${payload.question || 'Can you explain this step clearly and w
   public async generatePersonalizedQuestion(
     params: {
       userId: string;
+      skillLevel?: 'Beginner' | 'Intermediate' | 'Advanced';
       algorithmId?: string;
       topic?: string;
       completedAlgorithms?: string[];
@@ -125,16 +126,27 @@ Student Question: ${payload.question || 'Can you explain this step clearly and w
         ? params.weakAlgorithms[0]
         : 'merge-sort');
 
+    const skillLevel = params.skillLevel || 'Beginner';
+
     if (this.groqClient) {
       try {
+        const levelDirectives = {
+          Beginner: 'Focus on fundamental conceptual understanding, input/output behavior, identifying the basic purpose of variables, and simple recursion or loop limits. Keep it accessible and encouraging for a beginner student.',
+          Intermediate: 'Focus on loop invariants, off-by-one boundary checks, pointer manipulation (e.g. LPS rollback, mid-point calculation), and balance factors in trees.',
+          Advanced: 'Focus on asymptotic and amortized tight bounds, worst-case adversarial input permutations, cache locality, multi-rotation rebalancing cascades, and space-time trade-offs.',
+        }[skillLevel];
+
         const prompt = `Student User ID: ${params.userId}
+Student Custom Level: ${skillLevel}
 Target Algorithm / Topic: ${targetAlgo}
 Completed Algorithms: ${(params.completedAlgorithms || []).join(', ') || 'None yet'}
 Weak Topics (Struggled with): ${(params.weakAlgorithms || []).join(', ') || 'None reported'}
 Recent Quiz Errors: ${(params.recentErrors || []).join('; ') || 'No recorded errors'}
 
-Create a targeted, educational multiple-choice DSA quiz question for this student. Focus on their misconception or testing their understanding of edge cases/rotations/invariants for ${targetAlgo}.
-Return strict JSON with fields: id, algorithmId, title, question, options (4 objects with { id: "a"|"b"|"c"|"d", text, isCorrect }), explanation, difficulty ("Easy"|"Medium"|"Hard"), pedagogicalReason.`;
+Level Directive: ${levelDirectives}
+
+Create a targeted, educational multiple-choice DSA quiz question calibrated specifically for a ${skillLevel} student.
+Return strict JSON with fields: id, algorithmId, title, question, options (4 objects with { id: "a"|"b"|"c"|"d", text, isCorrect }), explanation, difficulty ("${skillLevel}"), pedagogicalReason.`;
 
         const completion = await this.groqClient.chat.completions.create({
           model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
@@ -142,7 +154,7 @@ Return strict JSON with fields: id, algorithmId, title, question, options (4 obj
             {
               role: 'system',
               content:
-                'You are an expert Computer Science professor generating personalized DSA practice questions for university students. You must output ONLY valid JSON matching the requested structure.',
+                'You are an expert Computer Science professor generating personalized DSA practice questions for university students calibrated by difficulty level. You must output ONLY valid JSON matching the requested structure.',
             },
             { role: 'user', content: prompt },
           ],
@@ -157,14 +169,14 @@ Return strict JSON with fields: id, algorithmId, title, question, options (4 obj
             return {
               id: parsed.id || `ai-${Date.now()}`,
               algorithmId: parsed.algorithmId || targetAlgo,
-              title: parsed.title || `${targetAlgo} Mastery Check`,
+              title: parsed.title || `${targetAlgo} [${skillLevel}] Mastery Check`,
               question: parsed.question,
               options: parsed.options,
               explanation: parsed.explanation || 'No explanation provided.',
-              difficulty: parsed.difficulty || 'Medium',
+              difficulty: parsed.difficulty || skillLevel,
               pedagogicalReason:
                 parsed.pedagogicalReason ||
-                `Personalized for your progress in ${targetAlgo}.`,
+                `Personalized for your ${skillLevel} skill level in ${targetAlgo}.`,
               source: 'groq',
             };
           }
@@ -174,21 +186,57 @@ Return strict JSON with fields: id, algorithmId, title, question, options (4 obj
       }
     }
 
-    // Deterministic Fallback Question
+    // Deterministic Fallback Question tailored by custom user level
+    const levelFallbacks: Record<string, any> = {
+      Beginner: {
+        title: `${targetAlgo.toUpperCase()} Foundational Concept`,
+        question: `For a beginner studying ${targetAlgo}, what is the fundamental operation that gives this algorithm its distinctive behavior?`,
+        options: [
+          { id: 'a', text: `It systematically reduces or divides the problem space step-by-step.`, isCorrect: true },
+          { id: 'b', text: `It randomly guesses answers until one works.`, isCorrect: false },
+          { id: 'c', text: `It ignores input size and runs in zero steps.`, isCorrect: false },
+          { id: 'd', text: `It only works on arrays of size 2.`, isCorrect: false },
+        ],
+        explanation: `At the beginner level, the key takeaway is that ${targetAlgo} systematically transforms or traverses elements adhering to proven rules.`,
+        difficulty: 'Beginner',
+      },
+      Intermediate: {
+        title: `${targetAlgo.toUpperCase()} Invariant & Mechanics`,
+        question: `In an intermediate implementation of ${targetAlgo}, what state invariant must be maintained across each iteration or recursive call?`,
+        options: [
+          { id: 'a', text: `The processed partition or interval guarantees structural ordering while pointers avoid redundant re-scanning.`, isCorrect: true },
+          { id: 'b', text: `All pointers must point to the same memory index at all times.`, isCorrect: false },
+          { id: 'c', text: `The array elements must be scrambled before every operation.`, isCorrect: false },
+          { id: 'd', text: `Recursion depth must equal the maximum value in the array.`, isCorrect: false },
+        ],
+        explanation: `Intermediate mastery requires tracking loop invariants, pointer bounds, and partition subproblem guarantees.`,
+        difficulty: 'Intermediate',
+      },
+      Advanced: {
+        title: `${targetAlgo.toUpperCase()} Tight Bounds & Edge Cases`,
+        question: `From an advanced algorithmic perspective, what adversarial input condition or amortized factor governs ${targetAlgo}'s worst-case guarantees?`,
+        options: [
+          { id: 'a', text: `Pathological input arrangements can trigger maximum tree height skew or maximum comparison cascades unless balanced by invariants.`, isCorrect: true },
+          { id: 'b', text: `Hardware branch predictors eliminate all O(n) algorithmic overhead.`, isCorrect: false },
+          { id: 'c', text: `Advanced implementations reduce all comparison-based sorting to O(1).`, isCorrect: false },
+          { id: 'd', text: `Cache misses have zero impact on high-throughput traversal.`, isCorrect: false },
+        ],
+        explanation: `Advanced analysis demands evaluating cache locality, adversarial input configurations, and amortized rotation bounds.`,
+        difficulty: 'Advanced',
+      },
+    };
+
+    const chosen = levelFallbacks[skillLevel] || levelFallbacks.Beginner;
+
     return {
       id: `fallback-${Date.now()}`,
       algorithmId: targetAlgo,
-      title: `${targetAlgo.toUpperCase()} Core Concept Check`,
-      question: `In ${targetAlgo}, which statement best characterizes its runtime invariant or operational property?`,
-      options: [
-        { id: 'a', text: `It guarantees optimal state transitions with documented worst-case bounds.`, isCorrect: true },
-        { id: 'b', text: `It always executes in O(1) space regardless of inputs.`, isCorrect: false },
-        { id: 'c', text: `It does not require comparisons or state transitions.`, isCorrect: false },
-        { id: 'd', text: `It only works on inputs of size less than 10.`, isCorrect: false },
-      ],
-      explanation: `Each algorithm in AlgoLens maintains strict invariants ensuring formal correctness and bounded asymptotic complexity.`,
-      difficulty: 'Medium',
-      pedagogicalReason: `Personalized review generated for ${targetAlgo} to reinforce foundational algorithmic properties.`,
+      title: chosen.title,
+      question: chosen.question,
+      options: chosen.options,
+      explanation: chosen.explanation,
+      difficulty: chosen.difficulty,
+      pedagogicalReason: `Personalized ${skillLevel} level review generated for ${targetAlgo} based on your student profile.`,
       source: 'fallback',
     };
   }

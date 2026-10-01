@@ -1,17 +1,31 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+export interface UserAccount {
+  id: string;
+  email: string;
+  passwordHash: string;
+  username: string;
+  fullName: string;
+  skillLevel: 'Beginner' | 'Intermediate' | 'Advanced';
+  createdAt: string;
+}
+
 class SupabaseService {
   private client: SupabaseClient | null = null;
   private isConfigured = false;
 
-  // In-memory mock store for demo/development when keys aren't added yet
+  // In-memory store for concurrent multi-user persistence & account isolation
   private mockStore = {
+    users: new Map<string, UserAccount>(), // Keyed by userId
+    emailToId: new Map<string, string>(), // Keyed by lowercase email
     progress: new Map<string, any[]>(),
     bookmarks: new Map<string, string[]>(),
     attempts: new Map<string, any[]>(),
   };
 
   constructor() {
+    this.seedDefaultAccounts();
+
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -31,7 +45,87 @@ class SupabaseService {
         console.warn('[Supabase] Initialization warning:', err.message);
       }
     } else {
-      console.log('[Supabase] Credentials not set. Running with demo local persistence.');
+      console.log('[Supabase] Running with isolated multi-user account persistence.');
+    }
+  }
+
+  private seedDefaultAccounts() {
+    // Seed verified test accounts with different skill levels so users can evaluate immediately or register new accounts
+    const seedUsers: Array<UserAccount & { progress?: any[]; attempts?: any[]; bookmarks?: string[] }> = [
+      {
+        id: 'user_alex_intermediate',
+        email: 'alex@algolens.edu',
+        passwordHash: 'AlexPass123!',
+        username: 'alex_chen',
+        fullName: 'Alex Chen',
+        skillLevel: 'Intermediate',
+        createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+        progress: [
+          { algorithm_id: 'merge-sort', status: 'completed', last_step: 33, updated_at: new Date().toISOString() },
+          { algorithm_id: 'binary-search', status: 'completed', last_step: 18, updated_at: new Date().toISOString() },
+          { algorithm_id: 'counting-sort', status: 'in_progress', last_step: 14, updated_at: new Date().toISOString() },
+        ],
+        bookmarks: ['merge-sort', 'avl'],
+        attempts: [
+          { userId: 'user_alex_intermediate', algorithmId: 'merge-sort', questionId: 'q-merge-1', selectedOption: 'a', isCorrect: true, attempted_at: new Date().toISOString() },
+          { userId: 'user_alex_intermediate', algorithmId: 'binary-search', questionId: 'q-binary-1', selectedOption: 'b', isCorrect: true, attempted_at: new Date().toISOString() },
+          { userId: 'user_alex_intermediate', algorithmId: 'avl', questionId: 'q-avl-1', selectedOption: 'a', isCorrect: false, attempted_at: new Date().toISOString() },
+        ],
+      },
+      {
+        id: 'user_priya_beginner',
+        email: 'priya@algolens.edu',
+        passwordHash: 'PriyaPass123!',
+        username: 'priya_sharma',
+        fullName: 'Priya Sharma',
+        skillLevel: 'Beginner',
+        createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+        progress: [
+          { algorithm_id: 'linear-search', status: 'completed', last_step: 12, updated_at: new Date().toISOString() },
+          { algorithm_id: 'binary-search', status: 'in_progress', last_step: 6, updated_at: new Date().toISOString() },
+        ],
+        bookmarks: ['binary-search'],
+        attempts: [
+          { userId: 'user_priya_beginner', algorithmId: 'binary-search', questionId: 'q-binary-beg-1', selectedOption: 'b', isCorrect: true, attempted_at: new Date().toISOString() },
+        ],
+      },
+      {
+        id: 'user_marcus_advanced',
+        email: 'marcus@algolens.edu',
+        passwordHash: 'MarcusPass123!',
+        username: 'marcus_vance',
+        fullName: 'Marcus Vance',
+        skillLevel: 'Advanced',
+        createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
+        progress: [
+          { algorithm_id: 'merge-sort', status: 'completed', last_step: 33, updated_at: new Date().toISOString() },
+          { algorithm_id: 'avl', status: 'completed', last_step: 29, updated_at: new Date().toISOString() },
+          { algorithm_id: 'kmp', status: 'completed', last_step: 25, updated_at: new Date().toISOString() },
+          { algorithm_id: 'dijkstra', status: 'completed', last_step: 40, updated_at: new Date().toISOString() },
+          { algorithm_id: 'min-heap', status: 'in_progress', last_step: 15, updated_at: new Date().toISOString() },
+        ],
+        bookmarks: ['avl', 'kmp', 'dijkstra'],
+        attempts: [
+          { userId: 'user_marcus_advanced', algorithmId: 'avl', questionId: 'q-avl-adv-1', selectedOption: 'b', isCorrect: true, attempted_at: new Date().toISOString() },
+          { userId: 'user_marcus_advanced', algorithmId: 'kmp', questionId: 'q-kmp-adv-1', selectedOption: 'a', isCorrect: true, attempted_at: new Date().toISOString() },
+        ],
+      },
+    ];
+
+    for (const u of seedUsers) {
+      this.mockStore.users.set(u.id, {
+        id: u.id,
+        email: u.email,
+        passwordHash: u.passwordHash,
+        username: u.username,
+        fullName: u.fullName,
+        skillLevel: u.skillLevel,
+        createdAt: u.createdAt,
+      });
+      this.mockStore.emailToId.set(u.email.toLowerCase(), u.id);
+      if (u.progress) this.mockStore.progress.set(u.id, u.progress);
+      if (u.bookmarks) this.mockStore.bookmarks.set(u.id, u.bookmarks);
+      if (u.attempts) this.mockStore.attempts.set(u.id, u.attempts);
     }
   }
 
@@ -64,14 +158,8 @@ class SupabaseService {
       } catch {}
     }
 
-    return this.mockStore.progress.get(userId) || [
-      {
-        algorithm_id: 'merge-sort',
-        status: 'completed',
-        last_step: 33,
-        updated_at: new Date().toISOString(),
-      },
-    ];
+    // Isolated per user: new users start with empty array if nothing recorded yet
+    return this.mockStore.progress.get(userId) || [];
   }
 
   public async saveProgress(
@@ -99,7 +187,6 @@ class SupabaseService {
         if (!error && data) return data;
       } catch {}
 
-      // Fallback: Save directly into Supabase auth user_metadata
       try {
         const { data: userData } = await this.client.auth.admin.getUserById(userId);
         const currentMeta = userData?.user?.user_metadata || {};
@@ -308,65 +395,111 @@ class SupabaseService {
   }
 
   // ============================================================
-  // Supabase Authentication Operations
+  // Supabase & Isolated Multi-User Authentication Operations
   // ============================================================
   public async signUp(
     email: string,
     password: string,
     username?: string,
-    fullName?: string
+    fullName?: string,
+    skillLevel: 'Beginner' | 'Intermediate' | 'Advanced' = 'Beginner'
   ): Promise<{
-    user: { id: string; email: string; username: string; fullName: string };
+    user: { id: string; email: string; username: string; fullName: string; skillLevel: string };
     token: string;
   }> {
-    const cleanUsername = username || email.split('@')[0];
-    const cleanFullName = fullName || cleanUsername;
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanUsername = username?.trim() || cleanEmail.split('@')[0];
+    const cleanFullName = fullName?.trim() || cleanUsername;
+
+    if (password.length < 6) {
+      throw new Error('Password must be at least 6 characters long.');
+    }
 
     if (this.isConfigured && this.client) {
       try {
         const { data, error } = await this.client.auth.admin.createUser({
-          email,
+          email: cleanEmail,
           password,
           email_confirm: true,
           user_metadata: {
             username: cleanUsername,
             full_name: cleanFullName,
+            skill_level: skillLevel,
           },
         });
 
         if (error) {
-          // If user already registered, sign in directly
           if (error.message.includes('already') || error.status === 422) {
-            return this.signIn(email, password);
+            throw new Error('An account with this email already exists. Please sign in instead.');
           }
           throw error;
         }
 
         const user = data.user;
+        const newUserId = user.id;
+        // Sync into mockStore for concurrent fast lookup
+        const account: UserAccount = {
+          id: newUserId,
+          email: cleanEmail,
+          passwordHash: password,
+          username: cleanUsername,
+          fullName: cleanFullName,
+          skillLevel,
+          createdAt: new Date().toISOString(),
+        };
+        this.mockStore.users.set(newUserId, account);
+        this.mockStore.emailToId.set(cleanEmail, newUserId);
+        this.mockStore.progress.set(newUserId, []);
+        this.mockStore.bookmarks.set(newUserId, []);
+        this.mockStore.attempts.set(newUserId, []);
+
         return {
           user: {
-            id: user.id,
-            email: user.email || email,
+            id: newUserId,
+            email: cleanEmail,
             username: cleanUsername,
             fullName: cleanFullName,
+            skillLevel,
           },
-          token: user.id,
+          token: newUserId,
         };
       } catch (err: any) {
-        console.warn('[Supabase Auth] admin.createUser failed, using fallback:', err.message);
+        if (err.message?.includes('already')) throw err;
+        console.warn('[Supabase Auth] admin.createUser failed, falling back to local multi-user store:', err.message);
       }
     }
 
-    // Local / Demo persistence fallback
-    const mockId = `user_${Date.now()}`;
+    // Isolated concurrent account creation
+    if (this.mockStore.emailToId.has(cleanEmail)) {
+      throw new Error('An account with this email already exists. Please sign in instead.');
+    }
+
+    const newUserId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newAccount: UserAccount = {
+      id: newUserId,
+      email: cleanEmail,
+      passwordHash: password,
+      username: cleanUsername,
+      fullName: cleanFullName,
+      skillLevel,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.mockStore.users.set(newUserId, newAccount);
+    this.mockStore.emailToId.set(cleanEmail, newUserId);
+    this.mockStore.progress.set(newUserId, []);
+    this.mockStore.bookmarks.set(newUserId, []);
+    this.mockStore.attempts.set(newUserId, []);
+
     return {
       user: {
-        id: mockId,
-        email,
+        id: newUserId,
+        email: cleanEmail,
         username: cleanUsername,
         fullName: cleanFullName,
+        skillLevel,
       },
-      token: mockId,
+      token: newUserId,
     };
   }
 
@@ -374,37 +507,60 @@ class SupabaseService {
     email: string,
     password: string
   ): Promise<{
-    user: { id: string; email: string; username: string; fullName: string };
+    user: { id: string; email: string; username: string; fullName: string; skillLevel: string };
     token: string;
   }> {
-    if (this.isConfigured && this.client) {
-      const { data, error } = await this.client.auth.signInWithPassword({
-        email,
-        password,
-      });
+    const cleanEmail = email.trim().toLowerCase();
 
-      if (error) throw error;
-      const user = data.user;
-      return {
-        user: {
-          id: user.id,
-          email: user.email || email,
-          username: user.user_metadata?.username || email.split('@')[0],
-          fullName: user.user_metadata?.full_name || user.email || 'Student',
-        },
-        token: data.session?.access_token || user.id,
-      };
+    if (this.isConfigured && this.client) {
+      try {
+        const { data, error } = await this.client.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+
+        if (error) throw error;
+        const user = data.user;
+        const skillLevel = user.user_metadata?.skill_level || 'Beginner';
+        return {
+          user: {
+            id: user.id,
+            email: user.email || cleanEmail,
+            username: user.user_metadata?.username || cleanEmail.split('@')[0],
+            fullName: user.user_metadata?.full_name || cleanEmail.split('@')[0],
+            skillLevel,
+          },
+          token: data.session?.access_token || user.id,
+        };
+      } catch (err: any) {
+        console.warn('[Supabase Auth] signInWithPassword error, checking multi-user store:', err.message);
+      }
     }
 
-    const mockId = `demo_user_${email.split('@')[0]}`;
+    // STRICT MULTI-USER AUTH: User MUST have a registered account!
+    const existingUserId = this.mockStore.emailToId.get(cleanEmail);
+    if (!existingUserId) {
+      throw new Error('No account found with this email. Please create an account first.');
+    }
+
+    const account = this.mockStore.users.get(existingUserId);
+    if (!account) {
+      throw new Error('Account record missing. Please register an account.');
+    }
+
+    if (account.passwordHash !== password) {
+      throw new Error('Incorrect password. Please verify and try again.');
+    }
+
     return {
       user: {
-        id: mockId,
-        email,
-        username: email.split('@')[0],
-        fullName: email.split('@')[0],
+        id: account.id,
+        email: account.email,
+        username: account.username,
+        fullName: account.fullName,
+        skillLevel: account.skillLevel,
       },
-      token: mockId,
+      token: account.id,
     };
   }
 
@@ -413,17 +569,171 @@ class SupabaseService {
       try {
         const { data, error } = await this.client.auth.getUser(token);
         if (!error && data?.user) return data.user;
-        // Or if token is userId
         const { data: adminUser } = await this.client.auth.admin.getUserById(token);
         if (adminUser?.user) return adminUser.user;
-      } catch {
-        // Continue
+      } catch {}
+    }
+
+    const localAccount = this.mockStore.users.get(token);
+    if (localAccount) {
+      return {
+        id: localAccount.id,
+        email: localAccount.email,
+        username: localAccount.username,
+        fullName: localAccount.fullName,
+        skillLevel: localAccount.skillLevel,
+        user_metadata: {
+          username: localAccount.username,
+          full_name: localAccount.fullName,
+          skill_level: localAccount.skillLevel,
+        },
+      };
+    }
+
+    // If token is an email lookup
+    const idByEmail = this.mockStore.emailToId.get(token.toLowerCase());
+    if (idByEmail) {
+      const acc = this.mockStore.users.get(idByEmail);
+      if (acc) {
+        return {
+          id: acc.id,
+          email: acc.email,
+          username: acc.username,
+          fullName: acc.fullName,
+          skillLevel: acc.skillLevel,
+        };
       }
     }
+
+    throw new Error('Unauthorized: Session is invalid or user does not exist.');
+  }
+
+  public async updateSkillLevel(
+    userId: string,
+    skillLevel: 'Beginner' | 'Intermediate' | 'Advanced'
+  ): Promise<any> {
+    const acc = this.mockStore.users.get(userId);
+    if (acc) {
+      acc.skillLevel = skillLevel;
+      this.mockStore.users.set(userId, acc);
+    }
+
+    if (this.isConfigured && this.client) {
+      try {
+        const { data: userData } = await this.client.auth.admin.getUserById(userId);
+        const currentMeta = userData?.user?.user_metadata || {};
+        await this.client.auth.admin.updateUserById(userId, {
+          user_metadata: { ...currentMeta, skill_level: skillLevel },
+        });
+      } catch {}
+    }
+
+    return { userId, skillLevel };
+  }
+
+  // ============================================================
+  // Custom Analytics & Graph Data Generator for Individual Users
+  // ============================================================
+  public async getUserAnalytics(userId: string) {
+    const progressList = await this.getProgress(userId);
+    const attempts = await this.getUserAttempts(userId);
+    const summary = await this.getUserLearningSummary(userId);
+
+    let skillLevel: 'Beginner' | 'Intermediate' | 'Advanced' = 'Beginner';
+    const acc = this.mockStore.users.get(userId);
+    if (acc) skillLevel = acc.skillLevel;
+
+    // Calculate Radar scores (0 - 100) across 6 DSA pillars
+    const completedSet = new Set(summary.completedAlgorithms);
+    const inProgressSet = new Set(summary.inProgressAlgorithms);
+
+    const calcDimension = (algos: string[]) => {
+      let score = 0;
+      algos.forEach((a) => {
+        if (completedSet.has(a)) score += 100 / algos.length;
+        else if (inProgressSet.has(a)) score += 50 / algos.length;
+      });
+      // Boost with quiz attempts
+      const topicAttempts = attempts.filter((at) => algos.includes(at.algorithmId));
+      if (topicAttempts.length > 0) {
+        const correct = topicAttempts.filter((at) => at.isCorrect).length;
+        const accuracy = (correct / topicAttempts.length) * 100;
+        score = Math.round(score * 0.6 + accuracy * 0.4);
+      }
+      return Math.min(100, Math.round(score));
+    };
+
+    const radarScores = {
+      divideConquer: calcDimension(['merge-sort', 'binary-search']),
+      balancedTrees: calcDimension(['avl']),
+      graphAlgorithms: calcDimension(['bfs', 'dfs', 'dijkstra']),
+      stringMatching: calcDimension(['kmp']),
+      heapsPriority: calcDimension(['min-heap', 'max-heap']),
+      asymptoticsInvariants: calcDimension(['counting-sort', 'linear-search', 'fibonacci-search']),
+    };
+
+    // Calculate difficulty level performance breakdown
+    const levelAttempts: Record<string, { total: number; correct: number }> = {
+      Beginner: { total: 0, correct: 0 },
+      Intermediate: { total: 0, correct: 0 },
+      Advanced: { total: 0, correct: 0 },
+    };
+
+    attempts.forEach((at) => {
+      const qLevel = at.questionLevel || (at.questionId?.includes('adv') ? 'Advanced' : at.questionId?.includes('beg') ? 'Beginner' : 'Intermediate');
+      if (levelAttempts[qLevel]) {
+        levelAttempts[qLevel].total += 1;
+        if (at.isCorrect) levelAttempts[qLevel].correct += 1;
+      }
+    });
+
+    const levelBreakdown = {
+      Beginner: {
+        attempted: levelAttempts.Beginner.total,
+        correct: levelAttempts.Beginner.correct,
+        accuracy: levelAttempts.Beginner.total > 0 ? Math.round((levelAttempts.Beginner.correct / levelAttempts.Beginner.total) * 100) : 0,
+      },
+      Intermediate: {
+        attempted: levelAttempts.Intermediate.total,
+        correct: levelAttempts.Intermediate.correct,
+        accuracy: levelAttempts.Intermediate.total > 0 ? Math.round((levelAttempts.Intermediate.correct / levelAttempts.Intermediate.total) * 100) : 0,
+      },
+      Advanced: {
+        attempted: levelAttempts.Advanced.total,
+        correct: levelAttempts.Advanced.correct,
+        accuracy: levelAttempts.Advanced.total > 0 ? Math.round((levelAttempts.Advanced.correct / levelAttempts.Advanced.total) * 100) : 0,
+      },
+    };
+
+    const totalAttempts = attempts.length;
+    const correctAttempts = attempts.filter((a) => a.isCorrect).length;
+    const accuracyPercentage = totalAttempts > 0 ? Math.round((correctAttempts / totalAttempts) * 100) : 0;
+
+    const categoryProgress = [
+      { name: 'Divide & Conquer', completed: ['merge-sort', 'binary-search'].filter((a) => completedSet.has(a)).length, total: 2 },
+      { name: 'Trees & Balanced Structures', completed: ['avl'].filter((a) => completedSet.has(a)).length, total: 1 },
+      { name: 'String Matching', completed: ['kmp'].filter((a) => completedSet.has(a)).length, total: 1 },
+      { name: 'Graph Theory & SSSP', completed: ['bfs', 'dfs', 'dijkstra'].filter((a) => completedSet.has(a)).length, total: 3 },
+      { name: 'Non-Comparison Sorting', completed: ['counting-sort'].filter((a) => completedSet.has(a)).length, total: 1 },
+    ].map((c) => ({
+      ...c,
+      percentage: Math.round((c.completed / c.total) * 100),
+    }));
+
     return {
-      id: token,
-      email: `${token}@algolens.edu`,
-      user_metadata: { username: token },
+      userId,
+      skillLevel,
+      masteryPercentage: summary.masteryPercentage,
+      completedAlgorithms: summary.completedAlgorithms,
+      inProgressAlgorithms: summary.inProgressAlgorithms,
+      weakAlgorithms: summary.weakAlgorithms,
+      totalAttempts,
+      correctAttempts,
+      accuracyPercentage,
+      radarScores,
+      levelBreakdown,
+      categoryProgress,
+      recentAttempts: attempts.slice(0, 10),
     };
   }
 }

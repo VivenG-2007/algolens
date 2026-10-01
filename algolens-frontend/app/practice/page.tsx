@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { QuizQuestion } from '@/types';
 import { apiClient } from '@/lib/api/client';
-import { useAuth } from '@/lib/context/AuthContext';
+import { useAuth, SkillLevel } from '@/lib/context/AuthContext';
 import confetti from 'canvas-confetti';
 import {
   HelpCircle,
@@ -21,13 +21,15 @@ import {
   Target,
   User,
   ShieldCheck,
+  AlertCircle,
+  TrendingUp,
 } from 'lucide-react';
 
 function PracticeContent() {
   const searchParams = useSearchParams();
   const preselectedAlgo = searchParams.get('algorithmId');
 
-  const { user, setIsAuthModalOpen } = useAuth();
+  const { user, setIsAuthModalOpen, updateUserSkillLevel } = useAuth();
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -36,20 +38,33 @@ function PracticeContent() {
     isCorrect: boolean;
     explanation: string;
     correctOptionId?: string;
+    questionLevel?: string;
   } | null>(null);
   const [score, setScore] = useState<number>(0);
+  const [consecutiveCorrect, setConsecutiveCorrect] = useState<number>(0);
   const [totalAnswered, setTotalAnswered] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Custom user skill level state
+  const [activeLevel, setActiveLevel] = useState<SkillLevel>(user?.skillLevel || 'Intermediate');
 
   // AI Personalized mode states
   const [isAiMode, setIsAiMode] = useState<boolean>(false);
   const [isGeneratingAi, setIsGeneratingAi] = useState<boolean>(false);
   const [aiQuestion, setAiQuestion] = useState<any | null>(null);
   const [studentContext, setStudentContext] = useState<{
+    skillLevel?: string;
     weakAlgorithms: string[];
     masteryPercentage: number;
   } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(preselectedAlgo || 'all');
+
+  // Sync activeLevel when user profile changes
+  useEffect(() => {
+    if (user?.skillLevel) {
+      setActiveLevel(user.skillLevel);
+    }
+  }, [user?.skillLevel]);
 
   // Available algorithm topics for targeted practice
   const algorithmCategories = [
@@ -67,19 +82,24 @@ function PracticeContent() {
     { id: 'counting-sort', label: 'Counting Sort' },
   ];
 
-  // Load standard bank questions on mount
+  // Load questions calibrated by category and active custom level
   useEffect(() => {
     async function loadQuestions() {
       setIsLoading(true);
       try {
         const data = await apiClient.getPracticeQuestions(
-          preselectedAlgo && preselectedAlgo !== 'all' ? preselectedAlgo : undefined
+          selectedCategory !== 'all' ? selectedCategory : undefined,
+          activeLevel
         );
         setQuestions(data);
+        setCurrentIndex(0);
+        setSelectedOption(null);
+        setSubmitted(false);
+        setAttemptResult(null);
+
         if (preselectedAlgo) {
-          // If came with specific algorithm, offer AI generation immediately
           setIsAiMode(true);
-          generateAiQuestion(preselectedAlgo);
+          generateAiQuestion(preselectedAlgo, activeLevel);
         }
       } catch (err) {
         console.warn('Fallback practice questions loaded');
@@ -88,30 +108,46 @@ function PracticeContent() {
       }
     }
     loadQuestions();
-  }, [preselectedAlgo]);
+  }, [selectedCategory, activeLevel, preselectedAlgo]);
 
-  // Generate real-time AI personalized question via Groq
-  const generateAiQuestion = async (algoId?: string) => {
+  // Generate real-time AI personalized question via Groq calibrated to user's custom level
+  const generateAiQuestion = async (algoId?: string, levelToUse?: SkillLevel) => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     setIsGeneratingAi(true);
     setSelectedOption(null);
     setSubmitted(false);
     setAttemptResult(null);
     setIsAiMode(true);
 
-    const targetUserId = user?.id || 'demo_user_alex';
+    const targetUserId = user.id;
     const targetAlgo = algoId && algoId !== 'all' ? algoId : selectedCategory !== 'all' ? selectedCategory : undefined;
+    const targetLevel = levelToUse || activeLevel;
 
     try {
-      const res = await apiClient.getPersonalizedPracticeQuestion(targetUserId, targetAlgo);
+      const res = await apiClient.getPersonalizedPracticeQuestion(targetUserId, targetAlgo, targetLevel);
       if (res.question) {
         setAiQuestion(res.question);
         setStudentContext(res.studentContext);
       }
     } catch (err) {
-      console.error('Failed to generate AI question, falling back to static questions', err);
+      console.error('Failed to generate AI question, falling back to curriculum questions', err);
       setIsAiMode(false);
     } finally {
       setIsGeneratingAi(false);
+    }
+  };
+
+  const handleLevelChange = (newLevel: SkillLevel) => {
+    setActiveLevel(newLevel);
+    if (user) {
+      updateUserSkillLevel(newLevel);
+    }
+    if (isAiMode) {
+      generateAiQuestion(selectedCategory, newLevel);
     }
   };
 
@@ -119,11 +155,17 @@ function PracticeContent() {
 
   const handleSubmitOption = async (optionId: string) => {
     if (submitted || !currentQ) return;
+
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     setSelectedOption(optionId);
     setSubmitted(true);
     setTotalAnswered((prev) => prev + 1);
 
-    const targetUserId = user?.id || 'demo_user_alex';
+    const targetUserId = user.id;
 
     if (isAiMode && aiQuestion) {
       const selectedOptObj = aiQuestion.options?.find((o: any) => o.id === optionId);
@@ -133,6 +175,7 @@ function PracticeContent() {
       try {
         await apiClient.submitPracticeAttempt(aiQuestion.id, optionId, targetUserId, {
           algorithmId: aiQuestion.algorithmId,
+          questionLevel: aiQuestion.difficulty || activeLevel,
           isCorrectOverride: isCorrect,
           explanationOverride: aiQuestion.explanation,
         });
@@ -144,27 +187,37 @@ function PracticeContent() {
         isCorrect,
         explanation: aiQuestion.explanation || 'Analyzed via AlgoLens pedagogical engine.',
         correctOptionId: correctOpt,
+        questionLevel: aiQuestion.difficulty || activeLevel,
       });
 
       if (isCorrect) {
         setScore((prev) => prev + 1);
+        setConsecutiveCorrect((prev) => prev + 1);
         confetti({
           particleCount: 85,
           spread: 75,
           origin: { y: 0.6 },
         });
+      } else {
+        setConsecutiveCorrect(0);
       }
     } else {
       try {
-        const res = await apiClient.submitPracticeAttempt(currentQ.id, optionId, targetUserId);
+        const res = await apiClient.submitPracticeAttempt(currentQ.id, optionId, targetUserId, {
+          algorithmId: currentQ.algorithmId,
+          questionLevel: currentQ.level || activeLevel,
+        });
         setAttemptResult(res);
         if (res.isCorrect) {
           setScore((prev) => prev + 1);
+          setConsecutiveCorrect((prev) => prev + 1);
           confetti({
             particleCount: 80,
             spread: 70,
             origin: { y: 0.6 },
           });
+        } else {
+          setConsecutiveCorrect(0);
         }
       } catch {
         const isCorrect = currentQ.options?.find((o: any) => o.id === optionId)?.isCorrect ?? false;
@@ -172,8 +225,14 @@ function PracticeContent() {
           isCorrect,
           explanation: currentQ.explanation,
           correctOptionId: currentQ.options?.find((o: any) => o.isCorrect)?.id || '',
+          questionLevel: currentQ.level || activeLevel,
         });
-        if (isCorrect) setScore((prev) => prev + 1);
+        if (isCorrect) {
+          setScore((prev) => prev + 1);
+          setConsecutiveCorrect((prev) => prev + 1);
+        } else {
+          setConsecutiveCorrect(0);
+        }
       }
     }
   };
@@ -184,8 +243,7 @@ function PracticeContent() {
     setAttemptResult(null);
 
     if (isAiMode) {
-      // In AI mode, generate another adaptive question
-      generateAiQuestion(selectedCategory);
+      generateAiQuestion(selectedCategory, activeLevel);
     } else {
       if (currentIndex < questions.length - 1) {
         setCurrentIndex((prev) => prev + 1);
@@ -196,31 +254,75 @@ function PracticeContent() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-7">
+      {/* Auth Gate Notification for unauthenticated visitors */}
+      {!user && (
+        <div className="p-4 rounded-xl bg-amber-950/70 border border-amber-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in shadow-lg">
+          <div className="flex items-center gap-2.5 text-amber-200">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+            <div className="leading-relaxed">
+              <span className="font-semibold text-white">Authentication Required:</span> Questions and custom accuracy graphs are tailored specifically to individual user skill levels. Please sign in or create an account to record attempts.
+            </div>
+          </div>
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold transition shrink-0 shadow-sm"
+          >
+            Sign In / Register
+          </button>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="text-center space-y-3 relative">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-brand-500/30 text-brand-300 text-xs font-mono">
           <Award className="w-3.5 h-3.5 text-accent-amber" />
-          <span>Supabase Sync & AI Adaptive Practice</span>
+          <span>Multi-User Isolated Arena & Level-Calibrated Engine</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
           DSA Algorithmic Practice Arena
         </h1>
         <p className="text-sm text-slate-300 max-w-xl mx-auto leading-relaxed">
-          Test your comprehension of loop invariants, tree balance factors, Dijkstra edge relaxations, and pointer transitions derived from live algorithm traces.
+          Questions are dynamically calibrated to your individual skill level ({activeLevel}), testing invariants, pointer mechanics, and complexity bounds.
         </p>
 
-        {/* Student Cloud Sync Bar */}
-        <div className="pt-2 flex items-center justify-center gap-3 text-xs font-mono text-slate-400">
-          <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-1">
-            <User className="w-3.5 h-3.5 text-brand-400" />
-            <span>Profile:</span>
-            <strong className="text-slate-200">{user?.fullName || 'Alex Student (Demo)'}</strong>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 ml-1" title="Supabase Connected" />
-          </div>
-          <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-emerald-300">Supabase Persistent</span>
+        {/* User Session Bar & Custom Level Selector */}
+        <div className="pt-2 flex flex-wrap items-center justify-center gap-3 text-xs font-mono">
+          {user ? (
+            <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-1.5 shadow-sm">
+              <User className="w-3.5 h-3.5 text-brand-400" />
+              <span className="text-slate-400">Student:</span>
+              <strong className="text-slate-100">{user.fullName || user.username}</strong>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 ml-1" title="Account Active" />
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 bg-slate-900/80 border border-amber-900/50 rounded-xl px-3.5 py-1.5 text-amber-300">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>Guest Session (Sign in to save scores)</span>
+            </div>
+          )}
+
+          {/* Interactive Skill Level Selector */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <span className="text-[11px] text-slate-400 px-2 font-mono">Calibrated Level:</span>
+            {(['Beginner', 'Intermediate', 'Advanced'] as SkillLevel[]).map((lvl) => (
+              <button
+                key={lvl}
+                type="button"
+                onClick={() => handleLevelChange(lvl)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                  activeLevel === lvl
+                    ? lvl === 'Beginner'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-sm'
+                      : lvl === 'Intermediate'
+                      ? 'bg-amber-600 text-white font-semibold shadow-sm'
+                      : 'bg-purple-600 text-white font-semibold shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                {lvl}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -244,12 +346,16 @@ function PracticeContent() {
               }`}
             >
               <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Standard Question Bank</span>
+              <span>Standard [{activeLevel}] Bank</span>
             </button>
             <button
               onClick={() => {
+                if (!user) {
+                  setIsAuthModalOpen(true);
+                  return;
+                }
                 setIsAiMode(true);
-                if (!aiQuestion) generateAiQuestion(selectedCategory);
+                if (!aiQuestion) generateAiQuestion(selectedCategory, activeLevel);
               }}
               className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1.5 ${
                 isAiMode
@@ -258,20 +364,20 @@ function PracticeContent() {
               }`}
             >
               <Bot className="w-3.5 h-3.5 text-brand-300" />
-              <span>AI Personalized (Groq)</span>
+              <span>AI Level-Tailored (Groq)</span>
             </button>
           </div>
 
           {/* Topic Filter */}
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-400 font-mono shrink-0">Topic Focus:</label>
+            <label className="text-xs text-slate-400 font-mono shrink-0">Topic:</label>
             <select
               value={selectedCategory}
               onChange={(e) => {
                 const newCat = e.target.value;
                 setSelectedCategory(newCat);
                 if (isAiMode) {
-                  generateAiQuestion(newCat);
+                  generateAiQuestion(newCat, activeLevel);
                 }
               }}
               className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-500 font-mono"
@@ -291,41 +397,47 @@ function PracticeContent() {
             <BrainCircuit className="w-4 h-4 text-brand-400 shrink-0" />
             <span>
               {isAiMode
-                ? 'AI dynamically queries your Neo4j knowledge mastery graph to produce targeted questions.'
-                : 'Want adaptive questions that focus on your specific weak spots?'}
+                ? `Groq LLaMA 3.3 is generating questions calibrated to your ${activeLevel} profile.`
+                : `Want targeted ${activeLevel} questions based on your specific learning trajectory?`}
             </span>
           </div>
           <button
-            onClick={() => generateAiQuestion(selectedCategory)}
+            onClick={() => generateAiQuestion(selectedCategory, activeLevel)}
             disabled={isGeneratingAi}
             className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-md transition disabled:opacity-50 shrink-0"
           >
             {isGeneratingAi ? (
               <>
                 <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                <span>AI Generating Question...</span>
+                <span>Generating {activeLevel} Question...</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Generate AI Question</span>
+                <span>Generate {activeLevel} Question</span>
               </>
             )}
           </button>
         </div>
 
-        {/* Student Adaptive Context Badges if available */}
-        {studentContext && studentContext.weakAlgorithms?.length > 0 && (
-          <div className="flex items-center gap-2 pt-2 text-[11px] font-mono text-slate-400">
-            <span className="text-amber-400 flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              Focus Areas Detected:
-            </span>
-            {studentContext.weakAlgorithms.map((w) => (
-              <span key={w} className="px-2 py-0.5 rounded bg-amber-950/70 border border-amber-500/30 text-amber-200">
-                {w}
+        {/* Consecutive Streak & Level Up Notification */}
+        {consecutiveCorrect >= 3 && (
+          <div className="p-3 rounded-xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-between gap-3 text-xs animate-in fade-in">
+            <div className="flex items-center gap-2 text-purple-200">
+              <TrendingUp className="w-4 h-4 text-purple-400" />
+              <span>
+                <strong>Mastery Streak:</strong> You answered {consecutiveCorrect} questions in a row correctly at {activeLevel} level!
               </span>
-            ))}
+            </div>
+            {activeLevel !== 'Advanced' && (
+              <button
+                type="button"
+                onClick={() => handleLevelChange(activeLevel === 'Beginner' ? 'Intermediate' : 'Advanced')}
+                className="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold text-[11px] transition shadow-sm shrink-0"
+              >
+                Level Up to {activeLevel === 'Beginner' ? 'Intermediate' : 'Advanced'}!
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -337,12 +449,12 @@ function PracticeContent() {
           <span>
             {isAiMode ? (
               <>
-                Mode: <strong className="text-emerald-400">AI Adaptive Stream</strong>
+                Mode: <strong className="text-emerald-400">AI {activeLevel} Adaptive</strong>
               </>
             ) : (
               <>
-                Question <strong className="text-white">{currentIndex + 1}</strong> of{' '}
-                <strong>{questions.length}</strong>
+                Question <strong className="text-white">{questions.length > 0 ? currentIndex + 1 : 0}</strong> of{' '}
+                <strong>{questions.length}</strong> ({activeLevel})
               </>
             )}
           </span>
@@ -367,32 +479,47 @@ function PracticeContent() {
           <div className="w-10 h-10 mx-auto rounded-full border-2 border-brand-500 border-t-transparent animate-spin" />
           <p className="text-xs font-mono text-slate-300">
             {isGeneratingAi
-              ? 'Groq AI (openai/gpt-oss-120b) is constructing your personalized question...'
-              : 'Loading question bank...'}
+              ? `Groq AI is constructing your personalized [${activeLevel}] question...`
+              : `Loading ${activeLevel} question bank...`}
           </p>
           <p className="text-[11px] text-slate-500">
-            Consulting student knowledge graph history and identifying conceptual edge cases.
+            Calibrated for individual student mastery and isolated multi-user sessions.
           </p>
         </div>
       ) : !currentQ ? (
         <div className="p-12 text-center text-slate-400 text-xs font-mono bg-dark-card border border-dark-border rounded-xl">
-          No questions available. Click &quot;Generate AI Question&quot; to test your skills!
+          No questions found for this topic and level. Click &quot;Generate {activeLevel} Question&quot; to test your skills!
         </div>
       ) : (
         <div className="bg-dark-card border border-dark-border rounded-xl p-6 sm:p-8 shadow-xl space-y-6">
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-brand-400 uppercase tracking-wider">
-                {currentQ.algorithmId || selectedCategory}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-brand-400 uppercase tracking-wider">
+                  {currentQ.algorithmId || selectedCategory}
+                </span>
+                {/* Level Badge */}
+                <span
+                  className={`text-[10px] font-mono px-2.5 py-1 rounded font-semibold border ${
+                    (currentQ.level || currentQ.difficulty || activeLevel) === 'Beginner'
+                      ? 'bg-emerald-950 border-emerald-500/40 text-emerald-300'
+                      : (currentQ.level || currentQ.difficulty || activeLevel) === 'Intermediate'
+                      ? 'bg-amber-950 border-amber-500/40 text-amber-300'
+                      : 'bg-purple-950 border-purple-500/40 text-purple-300'
+                  }`}
+                >
+                  Level: {currentQ.level || currentQ.difficulty || activeLevel}
+                </span>
+              </div>
+
               {isAiMode ? (
                 <span className="text-[10px] font-mono px-2.5 py-1 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 flex items-center gap-1">
                   <Bot className="w-3 h-3 text-emerald-400" />
-                  Groq AI Personalized
+                  Groq AI Tailored
                 </span>
               ) : (
                 <span className="text-[10px] font-mono px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-400">
-                  Standard Curriculum
+                  Curriculum Calibrated
                 </span>
               )}
             </div>
@@ -462,8 +589,9 @@ function PracticeContent() {
                 </span>
               </div>
               <p>{attemptResult.explanation}</p>
-              <div className="text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800">
-                ✓ Recorded to Supabase learning profile & updated Neo4j mastery node.
+              <div className="text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800 flex items-center justify-between">
+                <span>✓ Recorded to your personal mastery profile in Supabase.</span>
+                <span className="text-slate-500">Isolated Multi-User Session</span>
               </div>
             </div>
           )}
@@ -472,7 +600,7 @@ function PracticeContent() {
           {submitted && (
             <div className="flex items-center justify-between pt-2">
               <span className="text-xs text-slate-400 font-mono">
-                {isAiMode ? 'Next question will adapt to this result.' : 'Proceed through standard curriculum.'}
+                {isAiMode ? `Next question will adapt to your ${activeLevel} profile.` : 'Proceed through standard curriculum.'}
               </span>
               <button
                 type="button"

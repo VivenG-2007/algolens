@@ -9,6 +9,12 @@ import { executeAVL } from '../algorithms/avl.js';
 import { executeBFS, executeDFS, executeDijkstra, DEFAULT_GRAPH } from '../algorithms/graph.js';
 import { executeHeapOperations } from '../algorithms/heap.js';
 import { executeTrieOperations } from '../algorithms/trie.js';
+import { executeRadixSort } from '../algorithms/radixSort.js';
+import { executeBucketSort } from '../algorithms/bucketSort.js';
+import { executeInterpolationSearch } from '../algorithms/interpolationSearch.js';
+import { executeShellSort } from '../algorithms/shellSort.js';
+import { executeTreeSort } from '../algorithms/treeSort.js';
+import { executeQuickSort } from '../algorithms/quickSort.js';
 import { ALGORITHM_REGISTRY } from '../algorithms/metadata.js';
 
 export class AlgorithmEngine {
@@ -406,6 +412,180 @@ export class AlgorithmEngine {
               comparisons: lastStep.operationStats?.comparisons || 0,
               swapsOrRotations: 0,
               maxDepthOrHeight: Math.max(...words.map((w) => w.length), 1),
+            },
+          },
+        };
+      }
+
+      case 'radix-sort': {
+        const arr = payload.input || [170, 45, 75, 90, 802, 24, 2, 66];
+        if (!Array.isArray(arr) || arr.length === 0) {
+          throw new Error('Radix Sort requires a non-empty array of numbers.');
+        }
+        if (arr.length > 100) {
+          throw new Error('Input size exceeds maximum limit of 100 elements.');
+        }
+        for (const num of arr) {
+          if (!Number.isInteger(num) || num < 0) {
+            throw new Error('Radix Sort requires non-negative integers.');
+          }
+        }
+        const steps = executeRadixSort(arr);
+        const lastStep = steps[steps.length - 1];
+        return {
+          success: true,
+          algorithm,
+          input: arr,
+          steps,
+          metadata: {
+            timeComplexity: meta.timeComplexity.average,
+            spaceComplexity: meta.spaceComplexity,
+            totalSteps: steps.length,
+            version: this.VERSION,
+            actualStats: {
+              comparisons: 0,
+              swapsOrRotations: steps.filter((s) => s.operation === 'COLLECT').length,
+              maxDepthOrHeight: Math.max(...arr).toString().length,
+            },
+          },
+        };
+      }
+
+      case 'bucket-sort': {
+        const arr = payload.input || [0.42, 0.32, 0.73, 0.25, 0.52, 0.38, 0.91];
+        if (!Array.isArray(arr) || arr.length === 0) {
+          throw new Error('Bucket Sort requires a non-empty array of numbers.');
+        }
+        if (arr.length > 100) {
+          throw new Error('Input size exceeds maximum limit of 100 elements.');
+        }
+        const steps = executeBucketSort(arr, 5);
+        return {
+          success: true,
+          algorithm,
+          input: arr,
+          steps,
+          metadata: {
+            timeComplexity: meta.timeComplexity.average,
+            spaceComplexity: meta.spaceComplexity,
+            totalSteps: steps.length,
+            version: this.VERSION,
+            actualStats: {
+              comparisons: steps.filter((s) => s.comparisons).length,
+              swapsOrRotations: steps.filter((s) => s.operation === 'DISTRIBUTE').length,
+              maxDepthOrHeight: 5,
+            },
+          },
+        };
+      }
+
+      case 'interpolation-search': {
+        const arr = payload.input || [10, 20, 30, 40, 50, 60, 70, 80, 90];
+        if (!Array.isArray(arr) || arr.length === 0) {
+          throw new Error('Interpolation Search requires a non-empty array of numbers.');
+        }
+        const target = payload.target !== undefined ? Number(payload.target) : 70;
+        const steps = executeInterpolationSearch(arr, target);
+        return {
+          success: true,
+          algorithm,
+          input: { array: arr, target },
+          steps,
+          metadata: {
+            timeComplexity: meta.timeComplexity.average,
+            spaceComplexity: meta.spaceComplexity,
+            totalSteps: steps.length,
+            version: this.VERSION,
+            actualStats: {
+              comparisons: steps.filter((s) => s.operation === 'PROBE').length,
+              swapsOrRotations: 0,
+              maxDepthOrHeight: Math.ceil(Math.log2(Math.log2(Math.max(arr.length, 2)) + 1)),
+            },
+          },
+        };
+      }
+
+      case 'shell-sort': {
+        const arr = payload.input || [12, 34, 54, 2, 3];
+        if (!Array.isArray(arr) || arr.length === 0) {
+          throw new Error('Shell Sort requires a non-empty array of numbers.');
+        }
+        if (arr.length > 100) {
+          throw new Error('Input size exceeds maximum limit of 100 elements.');
+        }
+        const steps = executeShellSort(arr);
+        return {
+          success: true,
+          algorithm,
+          input: arr,
+          steps,
+          metadata: {
+            timeComplexity: meta.timeComplexity.average,
+            spaceComplexity: meta.spaceComplexity,
+            totalSteps: steps.length,
+            version: this.VERSION,
+            actualStats: {
+              comparisons: steps.filter((s) => s.comparisons).length,
+              swapsOrRotations: steps.filter((s) => s.operation === 'SHIFT' || s.operation === 'INSERT').length,
+              maxDepthOrHeight: Math.floor(Math.log2(arr.length)),
+            },
+          },
+        };
+      }
+
+      case 'tree-sort': {
+        const arr = payload.input || [50, 30, 70, 20, 40, 60, 80];
+        if (!Array.isArray(arr) || arr.length === 0) {
+          throw new Error('Tree Sort requires a non-empty array of numbers.');
+        }
+        if (arr.length > 100) {
+          throw new Error('Input size exceeds maximum limit of 100 elements.');
+        }
+        const steps = executeTreeSort(arr);
+        const lastStep = steps[steps.length - 1];
+        return {
+          success: true,
+          algorithm,
+          input: arr,
+          steps,
+          metadata: {
+            timeComplexity: meta.timeComplexity.average,
+            spaceComplexity: meta.spaceComplexity,
+            totalSteps: steps.length,
+            version: this.VERSION,
+            actualStats: {
+              comparisons: steps.filter((s) => s.comparisons).length,
+              swapsOrRotations: 0,
+              maxDepthOrHeight: Number(lastStep.variables?.height ?? Math.floor(Math.log2(arr.length)) + 1),
+            },
+          },
+        };
+      }
+
+      case 'quick-sort': {
+        const arr = payload.input || [8, 3, 1, 7, 0, 10, 2];
+        if (!Array.isArray(arr) || arr.length === 0) {
+          throw new Error('Quick Sort requires a non-empty array of numbers.');
+        }
+        if (arr.length > 100) {
+          throw new Error('Input size exceeds maximum limit of 100 elements.');
+        }
+        const steps = executeQuickSort(arr);
+        const lastStep = steps[steps.length - 1];
+        return {
+          success: true,
+          algorithm,
+          input: arr,
+          steps,
+          metadata: {
+            timeComplexity: meta.timeComplexity.average,
+            spaceComplexity: meta.spaceComplexity,
+            totalSteps: steps.length,
+            version: this.VERSION,
+            actualStats: {
+              comparisons: lastStep.operationStats?.comparisons || steps.filter((s) => s.comparisons).length,
+              swapsOrRotations: lastStep.operationStats?.swaps || steps.filter((s) => s.operation === 'SWAP').length,
+              maxDepthOrHeight: Math.floor(Math.log2(arr.length)) + 1,
             },
           },
         };

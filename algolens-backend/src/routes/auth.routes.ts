@@ -3,9 +3,18 @@ import { supabaseService } from '../services/supabase/supabase.service.js';
 
 const router = Router();
 
-// POST /api/auth/register
+// Helper to extract userId from Bearer token or query
+function extractUserId(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  return (req.query.userId as string) || (req.body?.userId as string) || null;
+}
+
+// POST /api/auth/register - Create a new student account
 router.post('/register', async (req: Request, res: Response) => {
-  const { email, password, username, fullName } = req.body;
+  const { email, password, username, fullName, skillLevel } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({
@@ -19,7 +28,8 @@ router.post('/register', async (req: Request, res: Response) => {
       email.trim(),
       password,
       username?.trim(),
-      fullName?.trim()
+      fullName?.trim(),
+      skillLevel || 'Beginner'
     );
     res.json({ success: true, data: result });
   } catch (err: any) {
@@ -30,7 +40,7 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/auth/login
+// POST /api/auth/login - Strict login: user MUST have an account
 router.post('/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
@@ -52,43 +62,34 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/auth/demo - Instant login for college demos
+// POST /api/auth/demo - Quick login to seeded accounts for presentation
 router.post('/demo', async (req: Request, res: Response) => {
+  const { role = 'intermediate' } = req.body;
   try {
-    const demoEmail = 'alex_student@algolens.edu';
-    const demoPassword = 'DemoPassword123!';
-    const result = await supabaseService.signUp(
-      demoEmail,
-      demoPassword,
-      'alex_student',
-      'Alex Student'
-    );
+    let email = 'alex@algolens.edu';
+    let password = 'AlexPass123!';
+    if (role === 'beginner') {
+      email = 'priya@algolens.edu';
+      password = 'PriyaPass123!';
+    } else if (role === 'advanced') {
+      email = 'marcus@algolens.edu';
+      password = 'MarcusPass123!';
+    }
+    const result = await supabaseService.signIn(email, password);
     res.json({ success: true, data: result });
-  } catch {
-    res.json({
-      success: true,
-      data: {
-        user: {
-          id: 'demo_user_alex',
-          email: 'alex_student@algolens.edu',
-          username: 'alex_student',
-          fullName: 'Alex Student',
-        },
-        token: 'demo_user_alex',
-      },
-    });
+  } catch (err: any) {
+    res.status(401).json({ success: false, error: { message: err.message } });
   }
 });
 
-// GET /api/auth/me
+// GET /api/auth/me - Validate current session token
 router.get('/me', async (req: Request, res: Response) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+  const token = extractUserId(req);
 
   if (!token) {
     return res.status(401).json({
       success: false,
-      error: { message: 'No authorization token provided.' },
+      error: { message: 'No authorization token provided. Please log in.' },
     });
   }
 
@@ -98,22 +99,56 @@ router.get('/me', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(401).json({
       success: false,
-      error: { message: err.message || 'Invalid session.' },
+      error: { message: err.message || 'Invalid session. Please log in again.' },
     });
+  }
+});
+
+// PUT /api/auth/skill-level - Update custom user skill level
+router.put('/skill-level', async (req: Request, res: Response) => {
+  const userId = extractUserId(req);
+  const { skillLevel } = req.body;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, error: { message: 'Authentication required' } });
+  }
+  if (!['Beginner', 'Intermediate', 'Advanced'].includes(skillLevel)) {
+    return res.status(400).json({ success: false, error: { message: 'Invalid skill level' } });
+  }
+
+  try {
+    const result = await supabaseService.updateSkillLevel(userId, skillLevel);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
   }
 });
 
 // GET /api/auth/summary - Full user mastery summary
 router.get('/summary', async (req: Request, res: Response) => {
-  const authHeader = req.headers.authorization;
-  const userId =
-    (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null) ||
-    (req.query.userId as string) ||
-    'demo_user_alex';
+  const userId = extractUserId(req);
+  if (!userId) {
+    return res.status(401).json({ success: false, error: { message: 'Authentication required' } });
+  }
 
   try {
     const summary = await supabaseService.getUserLearningSummary(userId);
     res.json({ success: true, data: summary });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
+// GET /api/auth/analytics - Custom graphs, radar metrics, and category progress for user
+router.get('/analytics', async (req: Request, res: Response) => {
+  const userId = extractUserId(req);
+  if (!userId) {
+    return res.status(401).json({ success: false, error: { message: 'Authentication required' } });
+  }
+
+  try {
+    const analytics = await supabaseService.getUserAnalytics(userId);
+    res.json({ success: true, data: analytics });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }

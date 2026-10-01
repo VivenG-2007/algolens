@@ -11,9 +11,18 @@ const API_BASE_URL =
 
 class ApiClient {
   private baseUrl: string;
+  private authToken: string | null = null;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
+  }
+
+  public setAuthToken(token: string | null) {
+    this.authToken = token;
+  }
+
+  public getAuthToken(): string | null {
+    return this.authToken;
   }
 
   private async request<T>(
@@ -26,6 +35,9 @@ class ApiClient {
     };
     if (options.body) {
       headers['Content-Type'] = 'application/json';
+    }
+    if (this.authToken && !headers['Authorization']) {
+      headers['Authorization'] = `Bearer ${this.authToken}`;
     }
 
     try {
@@ -114,10 +126,11 @@ class ApiClient {
     return { explanation: res.explanation, source: res.source };
   }
 
-  // Progress
-  public async getProgress(userId = 'student_demo_user'): Promise<any[]> {
+  // Progress (Isolated per user)
+  public async getProgress(userId?: string): Promise<any[]> {
+    const q = userId ? `?userId=${userId}` : '';
     const res = await this.request<{ success: boolean; data: any[] }>(
-      `/api/progress/progress?userId=${userId}`
+      `/api/progress/progress${q}`
     );
     return res.data;
   }
@@ -126,7 +139,7 @@ class ApiClient {
     algorithmId: string,
     status: 'started' | 'in_progress' | 'completed',
     lastStep: number,
-    userId = 'student_demo_user'
+    userId?: string
   ): Promise<any> {
     return this.request('/api/progress/progress', {
       method: 'POST',
@@ -135,16 +148,17 @@ class ApiClient {
   }
 
   // Bookmarks
-  public async getBookmarks(userId = 'student_demo_user'): Promise<string[]> {
+  public async getBookmarks(userId?: string): Promise<string[]> {
+    const q = userId ? `?userId=${userId}` : '';
     const res = await this.request<{ success: boolean; data: string[] }>(
-      `/api/progress/bookmarks?userId=${userId}`
+      `/api/progress/bookmarks${q}`
     );
     return res.data;
   }
 
   public async toggleBookmark(
     algorithmId: string,
-    userId = 'student_demo_user'
+    userId?: string
   ): Promise<{ bookmarked: boolean }> {
     const res = await this.request<{ success: boolean; data: { bookmarked: boolean } }>(
       '/api/progress/bookmarks',
@@ -156,29 +170,33 @@ class ApiClient {
     return res.data;
   }
 
-  // Practice
-  public async getPracticeQuestions(algorithmId?: string): Promise<QuizQuestion[]> {
-    const endpoint = algorithmId
-      ? `/api/practice/questions?algorithmId=${algorithmId}`
-      : '/api/practice/questions';
-    const res = await this.request<{ success: boolean; data: QuizQuestion[] }>(endpoint);
+  // Practice (Filtered by custom user skill level)
+  public async getPracticeQuestions(algorithmId?: string, level?: string): Promise<QuizQuestion[]> {
+    const params = new URLSearchParams();
+    if (algorithmId && algorithmId !== 'all') params.append('algorithmId', algorithmId);
+    if (level && level !== 'All') params.append('level', level);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await this.request<{ success: boolean; data: QuizQuestion[]; userLevel?: string }>(
+      `/api/practice/questions${qs}`
+    );
     return res.data;
   }
 
   public async getPersonalizedPracticeQuestion(
     userId: string,
-    algorithmId?: string
+    algorithmId?: string,
+    level?: string
   ): Promise<{
     question: any;
-    studentContext: { weakAlgorithms: string[]; masteryPercentage: number };
+    studentContext: { skillLevel: string; weakAlgorithms: string[]; masteryPercentage: number };
   }> {
     const res = await this.request<{
       success: boolean;
       data: any;
-      studentContext: { weakAlgorithms: string[]; masteryPercentage: number };
+      studentContext: { skillLevel: string; weakAlgorithms: string[]; masteryPercentage: number };
     }>('/api/practice/personalized', {
       method: 'POST',
-      body: JSON.stringify({ userId, algorithmId }),
+      body: JSON.stringify({ userId, algorithmId, level }),
     });
     return { question: res.data, studentContext: res.studentContext };
   }
@@ -186,16 +204,17 @@ class ApiClient {
   public async submitPracticeAttempt(
     questionId: string,
     selectedOption: string,
-    userId = 'student_demo_user',
+    userId: string,
     extra?: {
       algorithmId?: string;
+      questionLevel?: string;
       isCorrectOverride?: boolean;
       explanationOverride?: string;
     }
-  ): Promise<{ isCorrect: boolean; explanation: string; correctOptionId?: string }> {
+  ): Promise<{ isCorrect: boolean; explanation: string; correctOptionId?: string; questionLevel?: string }> {
     const res = await this.request<{
       success: boolean;
-      data: { isCorrect: boolean; explanation: string; correctOptionId?: string };
+      data: { isCorrect: boolean; explanation: string; correctOptionId?: string; questionLevel?: string };
     }>('/api/practice/attempt', {
       method: 'POST',
       body: JSON.stringify({
@@ -203,6 +222,7 @@ class ApiClient {
         questionId,
         selectedOption,
         algorithmId: extra?.algorithmId,
+        questionLevel: extra?.questionLevel,
         isCorrectOverride: extra?.isCorrectOverride,
         explanationOverride: extra?.explanationOverride,
       }),
@@ -210,7 +230,7 @@ class ApiClient {
     return res.data;
   }
 
-  // Knowledge Graph
+  // Knowledge Graph (Custom per user)
   public async getKnowledgeGraph(userId?: string): Promise<KnowledgeGraphData & {
     personalized?: boolean;
     userSummary?: any;
@@ -232,12 +252,15 @@ class ApiClient {
     return res.data;
   }
 
-  // Auth & User Profile (Supabase)
+  // Auth & Multi-User Profile
   public async login(email: string, password: string): Promise<any> {
     const res = await this.request<{ success: boolean; data: any }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
+    if (res.data?.token) {
+      this.setAuthToken(res.data.token);
+    }
     return res.data;
   }
 
@@ -245,25 +268,51 @@ class ApiClient {
     email: string,
     password: string,
     username?: string,
-    fullName?: string
+    fullName?: string,
+    skillLevel: 'Beginner' | 'Intermediate' | 'Advanced' = 'Beginner'
   ): Promise<any> {
     const res = await this.request<{ success: boolean; data: any }>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, username, fullName }),
+      body: JSON.stringify({ email, password, username, fullName, skillLevel }),
     });
+    if (res.data?.token) {
+      this.setAuthToken(res.data.token);
+    }
     return res.data;
   }
 
-  public async loginDemo(): Promise<any> {
+  public async loginDemo(role = 'intermediate'): Promise<any> {
     const res = await this.request<{ success: boolean; data: any }>('/api/auth/demo', {
       method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+    if (res.data?.token) {
+      this.setAuthToken(res.data.token);
+    }
+    return res.data;
+  }
+
+  public async updateSkillLevel(skillLevel: 'Beginner' | 'Intermediate' | 'Advanced'): Promise<any> {
+    const res = await this.request<{ success: boolean; data: any }>('/api/auth/skill-level', {
+      method: 'PUT',
+      body: JSON.stringify({ skillLevel }),
     });
     return res.data;
   }
 
-  public async getUserSummary(userId: string): Promise<any> {
+  public async getUserSummary(userId?: string): Promise<any> {
+    const q = userId ? `?userId=${userId}` : '';
     const res = await this.request<{ success: boolean; data: any }>(
-      `/api/auth/summary?userId=${userId}`
+      `/api/auth/summary${q}`
+    );
+    return res.data;
+  }
+
+  // Custom User Analytics & Radar Data
+  public async getAnalytics(userId?: string): Promise<any> {
+    const q = userId ? `?userId=${userId}` : '';
+    const res = await this.request<{ success: boolean; data: any }>(
+      `/api/auth/analytics${q}`
     );
     return res.data;
   }

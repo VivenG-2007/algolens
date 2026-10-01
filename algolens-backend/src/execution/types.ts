@@ -67,7 +67,13 @@ export type AlgorithmId =
   | 'dijkstra'
   | 'min-heap'
   | 'max-heap'
-  | 'trie';
+  | 'trie'
+  | 'radix-sort'
+  | 'bucket-sort'
+  | 'interpolation-search'
+  | 'shell-sort'
+  | 'tree-sort'
+  | 'quick-sort';
 
 export interface AlgorithmMetadata {
   id: AlgorithmId;

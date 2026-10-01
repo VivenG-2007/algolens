@@ -6,7 +6,7 @@ services:
     region: oregon
     rootDir: algolens-backend
     buildCommand: npm install --include=dev --legacy-peer-deps && npm run build
-    startCommand: npm start
+    startCommand: node dist/bootstrap.js
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:

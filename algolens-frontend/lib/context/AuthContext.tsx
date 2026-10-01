@@ -2,13 +2,29 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiClient } from '@/lib/api/client';
-import { User, LogIn, Sparkles, X, Check, ArrowRight } from 'lucide-react';
+import {
+  User,
+  LogIn,
+  Sparkles,
+  X,
+  Check,
+  ArrowRight,
+  Shield,
+  ShieldCheck,
+  AlertCircle,
+  GraduationCap,
+  Users,
+  LineChart,
+} from 'lucide-react';
 
-interface AuthUser {
+export type SkillLevel = 'Beginner' | 'Intermediate' | 'Advanced';
+
+export interface AuthUser {
   id: string;
   email: string;
   username: string;
   fullName: string;
+  skillLevel: SkillLevel;
 }
 
 interface AuthContextType {
@@ -17,10 +33,20 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
+  isCustomGraphsOpen: boolean;
+  setIsCustomGraphsOpen: (open: boolean) => void;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, username?: string, fullName?: string) => Promise<void>;
-  loginDemo: () => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    username?: string,
+    fullName?: string,
+    skillLevel?: SkillLevel
+  ) => Promise<void>;
+  loginDemoRole: (role: 'beginner' | 'intermediate' | 'advanced') => Promise<void>;
+  updateUserSkillLevel: (skillLevel: SkillLevel) => Promise<void>;
   logout: () => void;
+  requireAuth: (action: () => void) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,6 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isCustomGraphsOpen, setIsCustomGraphsOpen] = useState<boolean>(false);
 
   // Form states inside modal
   const [isRegisterMode, setIsRegisterMode] = useState<boolean>(false);
@@ -37,30 +64,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [usernameInput, setUsernameInput] = useState<string>('');
   const [fullNameInput, setFullNameInput] = useState<string>('');
+  const [skillLevelInput, setSkillLevelInput] = useState<SkillLevel>('Intermediate');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Load persisted user on client mount
+  // Load persisted user on client mount - NO AUTO-LOGIN WITHOUT ACCOUNT
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem('algolens_user');
       const storedToken = localStorage.getItem('algolens_token');
       if (storedUser && storedToken) {
-        setUser(JSON.parse(storedUser));
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
         setToken(storedToken);
+        apiClient.setAuthToken(storedToken);
       } else {
-        // Default to Demo Student for immediate PBL evaluation
-        const defaultUser: AuthUser = {
-          id: 'demo_user_alex',
-          email: 'alex_student@algolens.edu',
-          username: 'alex_student',
-          fullName: 'Alex Student',
-        };
-        setUser(defaultUser);
-        setToken('demo_user_alex');
+        // STRICT AUTH GATE: Unauthenticated user stays null
+        setUser(null);
+        setToken(null);
+        apiClient.setAuthToken(null);
       }
     } catch {
-      // Fallback
+      setUser(null);
+      setToken(null);
+      apiClient.setAuthToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -69,6 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handlePersist = (u: AuthUser, t: string) => {
     setUser(u);
     setToken(t);
+    apiClient.setAuthToken(t);
     try {
       localStorage.setItem('algolens_user', JSON.stringify(u));
       localStorage.setItem('algolens_token', t);
@@ -78,28 +107,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     setIsSubmitting(true);
     setAuthError(null);
+    setAuthSuccess(null);
     try {
       const res = await apiClient.login(email, password);
       if (res.user && res.token) {
         handlePersist(res.user, res.token);
-        setIsAuthModalOpen(false);
+        setAuthSuccess(`Welcome back, ${res.user.fullName || res.user.username}!`);
+        setTimeout(() => setIsAuthModalOpen(false), 500);
       }
     } catch (err: any) {
-      setAuthError(err.message || 'Login failed. Please check credentials.');
+      setAuthError(err.message || 'Login failed. Please verify credentials.');
       throw err;
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const register = async (email: string, password: string, username?: string, fullName?: string) => {
+  const register = async (
+    email: string,
+    password: string,
+    username?: string,
+    fullName?: string,
+    skillLevel: SkillLevel = 'Beginner'
+  ) => {
     setIsSubmitting(true);
     setAuthError(null);
+    setAuthSuccess(null);
     try {
-      const res = await apiClient.register(email, password, username, fullName);
+      const res = await apiClient.register(email, password, username, fullName, skillLevel);
       if (res.user && res.token) {
         handlePersist(res.user, res.token);
-        setIsAuthModalOpen(false);
+        setAuthSuccess(`Account created! Welcome, ${res.user.fullName || res.user.username}!`);
+        setTimeout(() => setIsAuthModalOpen(false), 500);
       }
     } catch (err: any) {
       setAuthError(err.message || 'Registration failed.');
@@ -109,46 +148,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginDemo = async () => {
+  const loginDemoRole = async (role: 'beginner' | 'intermediate' | 'advanced') => {
     setIsSubmitting(true);
     setAuthError(null);
     try {
-      const res = await apiClient.loginDemo();
+      const res = await apiClient.loginDemo(role);
       if (res.user && res.token) {
         handlePersist(res.user, res.token);
-        setIsAuthModalOpen(false);
+        setAuthSuccess(`Logged into ${res.user.fullName} (${res.user.skillLevel}) account!`);
+        setTimeout(() => setIsAuthModalOpen(false), 500);
       }
-    } catch {
-      const defaultUser: AuthUser = {
-        id: 'demo_user_alex',
-        email: 'alex_student@algolens.edu',
-        username: 'alex_student',
-        fullName: 'Alex Student',
-      };
-      handlePersist(defaultUser, 'demo_user_alex');
-      setIsAuthModalOpen(false);
+    } catch (err: any) {
+      setAuthError(err.message || 'Failed to authenticate sample account.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const updateUserSkillLevel = async (skillLevel: SkillLevel) => {
+    if (!user) return;
+    try {
+      await apiClient.updateSkillLevel(skillLevel);
+      const updated = { ...user, skillLevel };
+      handlePersist(updated, token || user.id);
+    } catch (err) {
+      console.error('Failed to update skill level:', err);
     }
   };
 
   const logout = () => {
     setUser(null);
     setToken(null);
+    apiClient.setAuthToken(null);
     try {
       localStorage.removeItem('algolens_user');
       localStorage.removeItem('algolens_token');
     } catch {}
   };
 
+  const requireAuth = (action: () => void) => {
+    if (user) {
+      action();
+    } else {
+      setIsAuthModalOpen(true);
+    }
+  };
+
   const handleModalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput || !passwordInput) {
-      setAuthError('Please fill in all required fields.');
+      setAuthError('Email and password are required.');
       return;
     }
     if (isRegisterMode) {
-      await register(emailInput, passwordInput, usernameInput, fullNameInput).catch(() => {});
+      await register(emailInput, passwordInput, usernameInput, fullNameInput, skillLevelInput).catch(() => {});
     } else {
       await login(emailInput, passwordInput).catch(() => {});
     }
@@ -162,103 +215,175 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         isAuthModalOpen,
         setIsAuthModalOpen,
+        isCustomGraphsOpen,
+        setIsCustomGraphsOpen,
         login,
         register,
-        loginDemo,
+        loginDemoRole,
+        updateUserSkillLevel,
         logout,
+        requireAuth,
       }}
     >
       {children}
 
-      {/* Supabase User Auth Modal */}
+      {/* Primary Authentication Gate Modal */}
       {isAuthModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-slate-900/95 border border-slate-700/80 rounded-2xl p-6 sm:p-7 shadow-2xl overflow-hidden">
+            {/* Ambient Background Glow */}
+            <div className="absolute -top-24 -right-24 w-60 h-60 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-24 -left-24 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
             {/* Close Button */}
             <button
               onClick={() => setIsAuthModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
+              aria-label="Close authentication modal"
             >
               <X className="w-5 h-5" />
             </button>
 
-            {/* Header */}
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-brand-500/20 border border-brand-500/40 flex items-center justify-center text-brand-400">
-                <User className="w-5 h-5" />
+            {/* Header Badge & Title */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-glow">
+                <ShieldCheck className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-semibold text-white">
-                  {isRegisterMode ? 'Create Student Account' : 'Supabase Student Sign In'}
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Sync your personalized knowledge graph & AI progress
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-white tracking-tight">
+                    {isRegisterMode ? 'Create Student Account' : 'Student Account Sign In'}
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-300 font-semibold uppercase">
+                    Primary Gate
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  An account is required for custom mastery graphs & adaptive quiz level calibration.
                 </p>
               </div>
             </div>
 
-            {/* Fast Demo One-Click Access */}
-            <div className="mb-5 p-3 rounded-xl bg-brand-950/60 border border-brand-500/30 flex items-center justify-between">
-              <div>
-                <div className="text-xs font-semibold text-brand-200 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-brand-400" />
-                  Instant Evaluator Demo Login
-                </div>
-                <div className="text-[11px] text-slate-400">
-                  Pre-configured student with personalized history
-                </div>
-              </div>
+            {/* Mode Switch Tabs */}
+            <div className="grid grid-cols-2 p-1 bg-slate-950 rounded-xl mb-5 border border-slate-800">
               <button
                 type="button"
-                onClick={loginDemo}
-                disabled={isSubmitting}
-                className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium transition shadow-sm shrink-0"
+                onClick={() => {
+                  setIsRegisterMode(false);
+                  setAuthError(null);
+                  setAuthSuccess(null);
+                }}
+                className={`py-2 text-xs font-semibold rounded-lg transition ${
+                  !isRegisterMode
+                    ? 'bg-slate-800 text-white shadow-sm border border-slate-700'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
               >
-                1-Click Demo
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRegisterMode(true);
+                  setAuthError(null);
+                  setAuthSuccess(null);
+                }}
+                className={`py-2 text-xs font-semibold rounded-lg transition ${
+                  isRegisterMode
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Register Account
               </button>
             </div>
 
-            {/* Error Message */}
+            {/* Feedback Alerts */}
             {authError && (
-              <div className="mb-4 p-3 rounded-lg bg-rose-950/70 border border-rose-500/50 text-rose-200 text-xs font-mono">
-                {authError}
+              <div className="mb-4 p-3 rounded-xl bg-rose-950/80 border border-rose-500/60 text-rose-200 text-xs flex items-start gap-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-semibold">Authentication Error:</span> {authError}
+                </div>
+              </div>
+            )}
+            {authSuccess && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{authSuccess}</span>
               </div>
             )}
 
-            {/* Credentials Form */}
+            {/* Form */}
             <form onSubmit={handleModalSubmit} className="space-y-3.5">
               {isRegisterMode && (
                 <>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      value={fullNameInput}
-                      onChange={(e) => setFullNameInput(e.target.value)}
-                      placeholder="e.g. Alex Morgan"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-brand-500 focus:outline-none"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        Full Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={fullNameInput}
+                        onChange={(e) => setFullNameInput(e.target.value)}
+                        placeholder="e.g. Maya Lin"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-brand-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        Username
+                      </label>
+                      <input
+                        type="text"
+                        value={usernameInput}
+                        onChange={(e) => setUsernameInput(e.target.value)}
+                        placeholder="e.g. maya_cs"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-brand-500 focus:outline-none"
+                      />
+                    </div>
                   </div>
+
+                  {/* Custom Skill Level Selection */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      Username
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center justify-between">
+                      <span>Custom Starting Skill Level *</span>
+                      <span className="text-[10px] text-brand-400 font-mono">Calibrates AI Questions</span>
                     </label>
-                    <input
-                      type="text"
-                      value={usernameInput}
-                      onChange={(e) => setUsernameInput(e.target.value)}
-                      placeholder="e.g. alex_student"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-brand-500 focus:outline-none"
-                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['Beginner', 'Intermediate', 'Advanced'] as SkillLevel[]).map((lvl) => (
+                        <button
+                          key={lvl}
+                          type="button"
+                          onClick={() => setSkillLevelInput(lvl)}
+                          className={`py-2 px-2 rounded-lg text-xs font-medium border text-center transition ${
+                            skillLevelInput === lvl
+                              ? lvl === 'Beginner'
+                                ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 font-semibold shadow-sm'
+                                : lvl === 'Intermediate'
+                                ? 'bg-amber-950/80 border-amber-500 text-amber-300 font-semibold shadow-sm'
+                                : 'bg-purple-950/80 border-purple-500 text-purple-300 font-semibold shadow-sm'
+                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {lvl}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1.5">
+                      {skillLevelInput === 'Beginner' && '🟢 Beginner: Foundational concepts, step-by-step traces, core time complexity.'}
+                      {skillLevelInput === 'Intermediate' && '🟡 Intermediate: Pointer mechanics, loop invariants, tree rotations, LPS failure.'}
+                      {skillLevelInput === 'Advanced' && '🟣 Advanced: Amortized bounds, adversarial worst-cases, cache locality, hard proofs.'}
+                    </p>
                   </div>
                 </>
               )}
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Email Address
+                  Email Address *
                 </label>
                 <input
                   type="email"
@@ -271,8 +396,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Password
+                <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center justify-between">
+                  <span>Password *</span>
+                  <span className="text-[10px] text-slate-500">Min 6 characters</span>
                 </label>
                 <input
                   type="password"
@@ -287,50 +413,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50 mt-2"
+                className="w-full py-2.5 rounded-lg bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50 mt-2"
               >
                 {isSubmitting ? (
-                  <span>Authenticating with Supabase...</span>
+                  <span>Verifying Account...</span>
                 ) : (
                   <>
-                    <span>{isRegisterMode ? 'Complete Registration' : 'Sign In to AlgoLens'}</span>
+                    <span>{isRegisterMode ? 'Create Account & Start Learning' : 'Log In to Account'}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}
               </button>
             </form>
 
-            {/* Toggle Mode */}
-            <div className="mt-4 pt-4 border-t border-slate-800 text-center text-xs text-slate-400">
-              {isRegisterMode ? (
-                <>
-                  Already registered?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRegisterMode(false);
-                      setAuthError(null);
-                    }}
-                    className="text-brand-400 hover:underline font-medium"
-                  >
-                    Sign In
-                  </button>
-                </>
-              ) : (
-                <>
-                  Don&apos;t have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRegisterMode(true);
-                      setAuthError(null);
-                    }}
-                    className="text-brand-400 hover:underline font-medium"
-                  >
-                    Register New Account
-                  </button>
-                </>
-              )}
+            {/* Multi-User Simultaneous Demo Testing Accounts */}
+            <div className="mt-5 pt-4 border-t border-slate-800">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-brand-400" />
+                  Simultaneous Multi-User Test Accounts
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">Isolated Data</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mb-2.5">
+                Log into predefined student accounts to test isolated custom graphs and varying question levels simultaneously in different browser windows:
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => loginDemoRole('beginner')}
+                  disabled={isSubmitting}
+                  className="p-2 rounded-lg bg-slate-950 border border-emerald-900/50 hover:border-emerald-500 text-left transition group"
+                >
+                  <div className="text-[11px] font-semibold text-emerald-300 group-hover:text-emerald-200">
+                    Priya (Beg.)
+                  </div>
+                  <div className="text-[9px] text-slate-500">priya@algolens.edu</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loginDemoRole('intermediate')}
+                  disabled={isSubmitting}
+                  className="p-2 rounded-lg bg-slate-950 border border-amber-900/50 hover:border-amber-500 text-left transition group"
+                >
+                  <div className="text-[11px] font-semibold text-amber-300 group-hover:text-amber-200">
+                    Alex (Inter.)
+                  </div>
+                  <div className="text-[9px] text-slate-500">alex@algolens.edu</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loginDemoRole('advanced')}
+                  disabled={isSubmitting}
+                  className="p-2 rounded-lg bg-slate-950 border border-purple-900/50 hover:border-purple-500 text-left transition group"
+                >
+                  <div className="text-[11px] font-semibold text-purple-300 group-hover:text-purple-200">
+                    Marcus (Adv.)
+                  </div>
+                  <div className="text-[9px] text-slate-500">marcus@algolens.edu</div>
+                </button>
+              </div>
             </div>
           </div>
         </div>

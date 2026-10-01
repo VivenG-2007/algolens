@@ -963,4 +963,494 @@ public:
 };`
     },
   },
+  'radix-sort': {
+    id: 'radix-sort',
+    name: 'Radix Sort (LSD)',
+    category: 'sorting',
+    description: 'Sort numbers digit-by-digit from least significant digit (LSD) to most significant digit using 10 distribution buckets (0-9).',
+    timeComplexity: {
+      best: 'O(d · (n + k))',
+      average: 'O(d · (n + k))',
+      worst: 'O(d · (n + k))',
+    },
+    spaceComplexity: 'O(n + k)',
+    pseudocode: [
+      'function radixSort(arr):',
+      '    maxVal = max(arr)',
+      '    exp = 1 // 1s, 10s, 100s...',
+      '    while maxVal / exp > 0:',
+      '        initialize 10 buckets (0 to 9)',
+      '        for num in arr:',
+      '            digit = floor(num / exp) % 10',
+      '            buckets[digit].push(num)',
+      '        reconstruct arr by collecting from bucket 0 to 9',
+      '        exp = exp * 10',
+    ],
+    sourceCode: {
+      c: `void countSort(int arr[], int n, int exp) {
+    int output[n];
+    int count[10] = {0};
+    for (int i = 0; i < n; i++) count[(arr[i] / exp) % 10]++;
+    for (int i = 1; i < 10; i++) count[i] += count[i - 1];
+    for (int i = n - 1; i >= 0; i--) {
+        output[count[(arr[i] / exp) % 10] - 1] = arr[i];
+        count[(arr[i] / exp) % 10]--;
+    }
+    for (int i = 0; i < n; i++) arr[i] = output[i];
+}
+void radixSort(int arr[], int n) {
+    int m = arr[0];
+    for (int i = 1; i < n; i++) if (arr[i] > m) m = arr[i];
+    for (int exp = 1; m / exp > 0; exp *= 10)
+        countSort(arr, n, exp);
+}`,
+      typescript: `function radixSort(arr: number[]): number[] {
+  let res = [...arr];
+  const max = Math.max(...res);
+  for (let exp = 1; Math.floor(max / exp) > 0; exp *= 10) {
+    const buckets: number[][] = Array.from({ length: 10 }, () => []);
+    for (const num of res) {
+      const digit = Math.floor(num / exp) % 10;
+      buckets[digit].push(num);
+    }
+    res = buckets.flat();
+  }
+  return res;
+}`,
+      python: `def radix_sort(arr):
+    max_val = max(arr)
+    exp = 1
+    while max_val // exp > 0:
+        buckets = [[] for _ in range(10)]
+        for num in arr:
+            digit = (num // exp) % 10
+            buckets[digit].append(num)
+        arr = [num for bucket in buckets for num in bucket]
+        exp *= 10
+    return arr`,
+      cpp: `void radixSort(vector<int>& arr) {
+    int maxVal = *max_element(arr.begin(), arr.end());
+    for (int exp = 1; maxVal / exp > 0; exp *= 10) {
+        vector<vector<int>> buckets(10);
+        for (int num : arr) {
+            buckets[(num / exp) % 10].push_back(num);
+        }
+        arr.clear();
+        for (auto& b : buckets) {
+            arr.insert(arr.end(), b.begin(), b.end());
+        }
+    }
+}`
+    }
+  },
+  'bucket-sort': {
+    id: 'bucket-sort',
+    name: 'Bucket Sort',
+    category: 'sorting',
+    description: 'Distributes elements into uniformly partitioned value buckets, sorts individual buckets, and concatenates them into sorted order.',
+    timeComplexity: {
+      best: 'O(n + k)',
+      average: 'O(n + k)',
+      worst: 'O(n²)',
+    },
+    spaceComplexity: 'O(n + k)',
+    pseudocode: [
+      'function bucketSort(arr, bucketCount):',
+      '    create bucketCount empty buckets',
+      '    minVal = min(arr), maxVal = max(arr)',
+      '    for num in arr:',
+      '        idx = floor((num - minVal) / range * (bucketCount - 1))',
+      '        buckets[idx].push(num)',
+      '    for bucket in buckets:',
+      '        sort(bucket) // e.g. Insertion Sort',
+      '    return concatenate(buckets[0] ... buckets[k-1])',
+    ],
+    sourceCode: {
+      c: `void bucketSort(float arr[], int n) {
+    // Partition into n buckets and sort each
+}`,
+      typescript: `function bucketSort(arr: number[], bucketCount = 5): number[] {
+  if (arr.length <= 1) return arr;
+  const min = Math.min(...arr), max = Math.max(...arr);
+  const buckets: number[][] = Array.from({ length: bucketCount }, () => []);
+  for (const x of arr) {
+    const idx = Math.min(bucketCount - 1, Math.floor(((x - min) / (max - min || 1)) * bucketCount));
+    buckets[idx].push(x);
+  }
+  return buckets.flatMap(b => b.sort((a, c) => a - c));
+}`,
+      python: `def bucket_sort(arr, k=5):
+    if len(arr) <= 1: return arr
+    mn, mx = min(arr), max(arr)
+    span = (mx - mn) or 1
+    buckets = [[] for _ in range(k)]
+    for x in arr:
+        idx = min(k - 1, int(((x - mn) / span) * k))
+        buckets[idx].append(x)
+    res = []
+    for b in buckets:
+        res.extend(sorted(b))
+    return res`,
+      cpp: `void bucketSort(vector<float>& arr, int k = 5) {
+    vector<vector<float>> buckets(k);
+    for (float x : arr) {
+        int idx = min(k - 1, (int)(x * k));
+        buckets[idx].push_back(x);
+    }
+    for (auto& b : buckets) sort(b.begin(), b.end());
+    arr.clear();
+    for (auto& b : buckets) arr.insert(arr.end(), b.begin(), b.end());
+}`
+    }
+  },
+  'interpolation-search': {
+    id: 'interpolation-search',
+    name: 'Interpolation Search',
+    category: 'searching',
+    description: 'An intelligent search for sorted uniformly distributed arrays estimating the target position with pos = low + ((target - arr[low]) * (high - low)) / (arr[high] - arr[low]).',
+    timeComplexity: {
+      best: 'O(1)',
+      average: 'O(log log n)',
+      worst: 'O(n)',
+    },
+    spaceComplexity: 'O(1)',
+    pseudocode: [
+      'function interpolationSearch(arr, target):',
+      '    low = 0, high = len(arr) - 1',
+      '    while low <= high and target >= arr[low] and target <= arr[high]:',
+      '        if low == high: return arr[low] == target ? low : -1',
+      '        pos = low + floor(((target - arr[low]) * (high - low)) / (arr[high] - arr[low]))',
+      '        if arr[pos] == target: return pos',
+      '        if arr[pos] < target: low = pos + 1',
+      '        else: high = pos - 1',
+      '    return -1',
+    ],
+    sourceCode: {
+      c: `int interpolationSearch(int arr[], int n, int x) {
+    int low = 0, high = n - 1;
+    while (low <= high && x >= arr[low] && x <= arr[high]) {
+        if (low == high) return arr[low] == x ? low : -1;
+        int pos = low + (((double)(high - low) / (arr[high] - arr[low])) * (x - arr[low]));
+        if (arr[pos] == x) return pos;
+        if (arr[pos] < x) low = pos + 1;
+        else high = pos - 1;
+    }
+    return -1;
+}`,
+      typescript: `function interpolationSearch(arr: number[], target: number): number {
+  let low = 0, high = arr.length - 1;
+  while (low <= high && target >= arr[low] && target <= arr[high]) {
+    if (low === high) return arr[low] === target ? low : -1;
+    const pos = low + Math.floor(((target - arr[low]) * (high - low)) / (arr[high] - arr[low]));
+    if (arr[pos] === target) return pos;
+    if (arr[pos] < target) low = pos + 1;
+    else high = pos - 1;
+  }
+  return -1;
+}`,
+      python: `def interpolation_search(arr, target):
+    low = 0
+    high = len(arr) - 1
+    while low <= high and arr[low] <= target <= arr[high]:
+        if low == high:
+            return low if arr[low] == target else -1
+        pos = low + int(((target - arr[low]) * (high - low)) / (arr[high] - arr[low]))
+        if arr[pos] == target:
+            return pos
+        if arr[pos] < target:
+            low = pos + 1
+        else:
+            high = pos - 1
+    return -1`,
+      cpp: `int interpolationSearch(const vector<int>& arr, int target) {
+    int low = 0, high = arr.size() - 1;
+    while (low <= high && target >= arr[low] && target <= arr[high]) {
+        if (low == high) return arr[low] == target ? low : -1;
+        int pos = low + (((double)(high - low) / (arr[high] - arr[low])) * (target - arr[low]));
+        if (arr[pos] == target) return pos;
+        if (arr[pos] < target) low = pos + 1;
+        else high = pos - 1;
+    }
+    return -1;
+}`
+    }
+  },
+  'shell-sort': {
+    id: 'shell-sort',
+    name: 'Shell Sort',
+    category: 'sorting',
+    description: 'An in-place comparison sort that generalizes insertion sort by exchanging elements separated by a shrinking gap (n/2 down to 1).',
+    timeComplexity: {
+      best: 'O(n log n)',
+      average: 'O(n^(4/3))',
+      worst: 'O(n²)',
+    },
+    spaceComplexity: 'O(1)',
+    pseudocode: [
+      'function shellSort(arr):',
+      '    n = len(arr)',
+      '    gap = floor(n / 2)',
+      '    while gap > 0:',
+      '        for i from gap to n - 1:',
+      '            temp = arr[i]',
+      '            j = i',
+      '            while j >= gap and arr[j - gap] > temp:',
+      '                arr[j] = arr[j - gap]',
+      '                j -= gap',
+      '            arr[j] = temp',
+      '        gap = floor(gap / 2)',
+    ],
+    sourceCode: {
+      c: `void shellSort(int arr[], int n) {
+    for (int gap = n / 2; gap > 0; gap /= 2) {
+        for (int i = gap; i < n; i++) {
+            int temp = arr[i], j;
+            for (j = i; j >= gap && arr[j - gap] > temp; j -= gap)
+                arr[j] = arr[j - gap];
+            arr[j] = temp;
+        }
+    }
+}`,
+      typescript: `function shellSort(arr: number[]): number[] {
+  const n = arr.length;
+  for (let gap = Math.floor(n / 2); gap > 0; gap = Math.floor(gap / 2)) {
+    for (let i = gap; i < n; i++) {
+      const temp = arr[i];
+      let j = i;
+      while (j >= gap && arr[j - gap] > temp) {
+        arr[j] = arr[j - gap];
+        j -= gap;
+      }
+      arr[j] = temp;
+    }
+  }
+  return arr;
+}`,
+      python: `def shell_sort(arr):
+    n = len(arr)
+    gap = n // 2
+    while gap > 0:
+        for i in range(gap, n):
+            temp = arr[i]
+            j = i
+            while j >= gap and arr[j - gap] > temp:
+                arr[j] = arr[j - gap]
+                j -= gap
+            arr[j] = temp
+        gap //= 2
+    return arr`,
+      cpp: `void shellSort(vector<int>& arr) {
+    int n = arr.size();
+    for (int gap = n / 2; gap > 0; gap /= 2) {
+        for (int i = gap; i < n; i++) {
+            int temp = arr[i], j = i;
+            while (j >= gap && arr[j - gap] > temp) {
+                arr[j] = arr[j - gap];
+                j -= gap;
+            }
+            arr[j] = temp;
+        }
+    }
+}`
+    }
+  },
+  'tree-sort': {
+    id: 'tree-sort',
+    name: 'Tree Sort',
+    category: 'tree',
+    description: 'Builds a Binary Search Tree (BST) from the input array elements and extracts sorted output via Inorder Traversal (Left → Root → Right).',
+    timeComplexity: {
+      best: 'O(n log n)',
+      average: 'O(n log n)',
+      worst: 'O(n²)',
+    },
+    spaceComplexity: 'O(n)',
+    pseudocode: [
+      'function treeSort(arr):',
+      '    root = null',
+      '    for val in arr:',
+      '        root = insertBST(root, val)',
+      '    sortedList = []',
+      '    inorder(root, sortedList)',
+      '    return sortedList',
+      'function inorder(node, list):',
+      '    if node is null: return',
+      '    inorder(node.left, list)',
+      '    list.push(node.val)',
+      '    inorder(node.right, list)',
+    ],
+    sourceCode: {
+      c: `struct Node { int key; struct Node *left, *right; };
+struct Node* insert(struct Node* node, int key) {
+    if (!node) { struct Node* n = malloc(sizeof(struct Node)); n->key = key; n->left = n->right = NULL; return n; }
+    if (key < node->key) node->left = insert(node->left, key);
+    else node->right = insert(node->right, key);
+    return node;
+}
+void inorder(struct Node* root) {
+    if (root) { inorder(root->left); printf("%d ", root->key); inorder(root->right); }
+}`,
+      typescript: `class TreeNode {
+  val: number;
+  left: TreeNode | null = null;
+  right: TreeNode | null = null;
+  constructor(v: number) { this.val = v; }
+}
+
+function treeSort(arr: number[]): number[] {
+  let root: TreeNode | null = null;
+  const insert = (node: TreeNode | null, val: number): TreeNode => {
+    if (!node) return new TreeNode(val);
+    if (val < node.val) node.left = insert(node.left, val);
+    else node.right = insert(node.right, val);
+    return node;
+  };
+  for (const x of arr) root = insert(root, x);
+  const sorted: number[] = [];
+  const inorder = (node: TreeNode | null) => {
+    if (!node) return;
+    inorder(node.left);
+    sorted.push(node.val);
+    inorder(node.right);
+  };
+  inorder(root);
+  return sorted;
+}`,
+      python: `class BSTNode:
+    def __init__(self, val):
+        self.val = val
+        self.left = None
+        self.right = None
+
+def tree_sort(arr):
+    root = None
+    def insert(node, val):
+        if not node: return BSTNode(val)
+        if val < node.val: node.left = insert(node.left, val)
+        else: node.right = insert(node.right, val)
+        return node
+    for x in arr: root = insert(root, x)
+    res = []
+    def inorder(node):
+        if not node: return
+        inorder(node.left)
+        res.append(node.val)
+        inorder(node.right)
+    inorder(root)
+    return res`,
+      cpp: `struct Node { int val; Node *left = nullptr, *right = nullptr; Node(int v): val(v){} };
+Node* insert(Node* node, int v) {
+    if (!node) return new Node(v);
+    if (v < node->val) node->left = insert(node->left, v);
+    else node->right = insert(node->right, v);
+    return node;
+}
+void inorder(Node* root, vector<int>& out) {
+    if (!root) return;
+    inorder(root->left, out);
+    out.push_back(root->val);
+    inorder(root->right, out);
+}`
+    }
+  },
+  'quick-sort': {
+    id: 'quick-sort',
+    name: 'Quick Sort',
+    category: 'sorting',
+    description: 'Selects a pivot, partitions elements into subarrays smaller and greater than the pivot with scan pointers i and j, and recursively sorts subarrays.',
+    timeComplexity: {
+      best: 'O(n log n)',
+      average: 'O(n log n)',
+      worst: 'O(n²)',
+    },
+    spaceComplexity: 'O(log n)',
+    pseudocode: [
+      'function quickSort(arr, low, high):',
+      '    if low < high:',
+      '        pi = partition(arr, low, high)',
+      '        quickSort(arr, low, pi - 1)',
+      '        quickSort(arr, pi + 1, high)',
+      'function partition(arr, low, high):',
+      '    pivot = arr[high]',
+      '    i = low - 1',
+      '    for j from low to high - 1:',
+      '        if arr[j] < pivot:',
+      '            i++',
+      '            swap(arr[i], arr[j])',
+      '    swap(arr[i + 1], arr[high])',
+      '    return i + 1',
+    ],
+    sourceCode: {
+      c: `void swap(int* a, int* b) { int t = *a; *a = *b; *b = t; }
+int partition(int arr[], int low, int high) {
+    int pivot = arr[high], i = low - 1;
+    for (int j = low; j < high; j++) {
+        if (arr[j] < pivot) { i++; swap(&arr[i], &arr[j]); }
+    }
+    swap(&arr[i + 1], &arr[high]);
+    return i + 1;
+}
+void quickSort(int arr[], int low, int high) {
+    if (low < high) {
+        int pi = partition(arr, low, high);
+        quickSort(arr, low, pi - 1);
+        quickSort(arr, pi + 1, high);
+    }
+}`,
+      typescript: `function quickSort(arr: number[], low = 0, high = arr.length - 1): void {
+  if (low < high) {
+    const pi = partition(arr, low, high);
+    quickSort(arr, low, pi - 1);
+    quickSort(arr, pi + 1, high);
+  }
+}
+function partition(arr: number[], low: number, high: number): number {
+  const pivot = arr[high];
+  let i = low - 1;
+  for (let j = low; j < high; j++) {
+    if (arr[j] < pivot) {
+      i++;
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+  [arr[i + 1], arr[high]] = [arr[high], arr[i + 1]];
+  return i + 1;
+}`,
+      python: `def quick_sort(arr, low=0, high=None):
+    if high is None: high = len(arr) - 1
+    if low < high:
+        pi = partition(arr, low, high)
+        quick_sort(arr, low, pi - 1)
+        quick_sort(arr, pi + 1, high)
+
+def partition(arr, low, high):
+    pivot = arr[high]
+    i = low - 1
+    for j in range(low, high):
+        if arr[j] < pivot:
+            i += 1
+            arr[i], arr[j] = arr[j], arr[i]
+    arr[i + 1], arr[high] = arr[high], arr[i + 1]
+    return i + 1`,
+      cpp: `int partition(vector<int>& arr, int low, int high) {
+    int pivot = arr[high], i = low - 1;
+    for (int j = low; j < high; j++) {
+        if (arr[j] < pivot) {
+            i++;
+            swap(arr[i], arr[j]);
+        }
+    }
+    swap(arr[i + 1], arr[high]);
+    return i + 1;
+}
+void quickSort(vector<int>& arr, int low, int high) {
+    if (low < high) {
+        int pi = partition(arr, low, high);
+        quickSort(arr, low, pi - 1);
+        quickSort(arr, pi + 1, high);
+    }
+}`
+    }
+  }
 };
+

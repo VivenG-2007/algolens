@@ -139,11 +139,13 @@ export default function KnowledgeGraphPage() {
 
   const headerRef = useRef<HTMLDivElement>(null);
   const headerInView = useInView(headerRef, { once: true });
+  const { setIsCustomGraphsOpen } = useAuth();
 
   const loadGraph = async (personalized: boolean) => {
     setIsLoading(true);
     try {
-      const targetUserId = personalized && user ? user.id : personalized ? 'demo_user_alex' : undefined;
+      // Isolate strictly to active logged-in user
+      const targetUserId = personalized && user ? user.id : undefined;
       const data = await apiClient.getKnowledgeGraph(targetUserId);
       setGraphData(data);
       if ((data as any).userSummary) {
@@ -184,7 +186,25 @@ export default function KnowledgeGraphPage() {
   const connectedNodeIds = new Set(connectedLinks.flatMap((l) => [l.source, l.target]));
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
+      {/* Auth Gate Notification for unauthenticated visitors */}
+      {!user && (
+        <div className="p-4 rounded-xl bg-amber-950/60 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5 text-amber-200">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+            <div className="leading-relaxed">
+              <span className="font-semibold text-white">Student Account Required:</span> You are viewing the global static curriculum graph. Create an account or sign in to generate and track your custom personal mastery graph, calibrated by your skill level.
+            </div>
+          </div>
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold transition shrink-0 shadow-sm"
+          >
+            Sign In / Register
+          </button>
+        </div>
+      )}
+
       {/* Animated Page Header & Personalized Switcher */}
       <motion.div
         ref={headerRef}
@@ -202,14 +222,33 @@ export default function KnowledgeGraphPage() {
             <div className="flex items-center gap-2 mb-3">
               <span className="px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-300 text-xs font-mono uppercase tracking-wider flex items-center gap-1.5">
                 <Network className="w-3.5 h-3.5" />
-                {isPersonalized ? 'Personalized Knowledge Graph' : 'Global Curriculum Graph'}
+                {isPersonalized && user
+                  ? `Custom Graph: ${user.fullName || user.username}`
+                  : isPersonalized
+                  ? 'Personalized Knowledge Graph'
+                  : 'Global Curriculum Graph'}
               </span>
+              {user && (
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${
+                  user.skillLevel === 'Beginner'
+                    ? 'bg-emerald-950 border-emerald-500/40 text-emerald-300'
+                    : user.skillLevel === 'Intermediate'
+                    ? 'bg-amber-950 border-amber-500/40 text-amber-300'
+                    : 'bg-purple-950 border-purple-500/40 text-purple-300'
+                }`}>
+                  Level: {user.skillLevel}
+                </span>
+              )}
               <span className="text-[10px] text-slate-500 font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
                 {graphData.nodes.length} nodes · {graphData.links.length} relationships
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              {isPersonalized ? 'Your Custom Learning Graph' : 'Algorithm Concept Graph'}
+              {isPersonalized && user
+                ? `${user.fullName || user.username}'s Learning Graph`
+                : isPersonalized
+                ? 'Your Custom Learning Graph'
+                : 'Algorithm Concept Graph'}
             </h1>
             <p className="mt-2 text-sm text-slate-300 leading-relaxed">
               {isPersonalized
@@ -220,8 +259,24 @@ export default function KnowledgeGraphPage() {
 
           {/* Graph View Toggle */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-1.5 bg-slate-950/80 border border-slate-800 rounded-xl shrink-0">
+            {user && (
+              <button
+                type="button"
+                onClick={() => setIsCustomGraphsOpen(true)}
+                className="px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-950/90 border border-indigo-700/60 text-indigo-300 hover:text-white transition flex items-center justify-center gap-1.5"
+              >
+                <Zap className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Radar Analytics</span>
+              </button>
+            )}
             <button
-              onClick={() => setIsPersonalized(true)}
+              onClick={() => {
+                if (!user) {
+                  setIsAuthModalOpen(true);
+                  return;
+                }
+                setIsPersonalized(true);
+              }}
               className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 ${
                 isPersonalized
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm'
@@ -229,7 +284,7 @@ export default function KnowledgeGraphPage() {
               }`}
             >
               <UserCheck className="w-3.5 h-3.5" />
-              <span>Personalized</span>
+              <span>{user ? 'My Custom Graph' : 'Personalized'}</span>
             </button>
             <button
               onClick={() => setIsPersonalized(false)}

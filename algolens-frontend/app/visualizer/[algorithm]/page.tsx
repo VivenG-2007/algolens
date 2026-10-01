@@ -14,6 +14,12 @@ import { AVLVisualizer } from '@/components/visualizer/AVLVisualizer';
 import { GraphVisualizer } from '@/components/visualizer/GraphVisualizer';
 import { HeapVisualizer } from '@/components/visualizer/HeapVisualizer';
 import { TrieVisualizer } from '@/components/visualizer/TrieVisualizer';
+import { RadixSortVisualizer } from '@/components/visualizer/RadixSortVisualizer';
+import { BucketSortVisualizer } from '@/components/visualizer/BucketSortVisualizer';
+import { InterpolationSearchVisualizer } from '@/components/visualizer/InterpolationSearchVisualizer';
+import { ShellSortVisualizer } from '@/components/visualizer/ShellSortVisualizer';
+import { TreeSortVisualizer } from '@/components/visualizer/TreeSortVisualizer';
+import { QuickSortVisualizer } from '@/components/visualizer/QuickSortVisualizer';
 import { PlaybackControls } from '@/components/visualizer/PlaybackControls';
 import { CodeViewer } from '@/components/visualizer/CodeViewer';
 import { VariablesPanel } from '@/components/visualizer/VariablesPanel';
@@ -62,6 +68,30 @@ export default function VisualizerPage() {
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [predictionFeedback, setPredictionFeedback] = useState<boolean | null>(null);
 
+  // Playback & Chatbot interaction synchronization (pause when chatbot opens, resume when closed)
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [wasPlayingBeforeChatbot, setWasPlayingBeforeChatbot] = useState<boolean>(false);
+  const [isChatbotOpen, setIsChatbotOpen] = useState<boolean>(false);
+
+  const handleChatbotOpenChange = (open: boolean) => {
+    setIsChatbotOpen(open);
+    if (open) {
+      // Pause visualization immediately at current step
+      if (isPlaying) {
+        setWasPlayingBeforeChatbot(true);
+        setIsPlaying(false);
+      } else {
+        setWasPlayingBeforeChatbot(false);
+      }
+    } else {
+      // Once closed, continue playback if it was previously playing
+      if (wasPlayingBeforeChatbot) {
+        setIsPlaying(true);
+        setWasPlayingBeforeChatbot(false);
+      }
+    }
+  };
+
   // Reset prediction state when step changes
   useEffect(() => {
     setSelectedPrediction(null);
@@ -81,6 +111,12 @@ export default function VisualizerPage() {
     if (algorithm === 'dijkstra') defaultPayload = { startNode: 'A', targetNode: 'F' };
     if (algorithm === 'min-heap' || algorithm === 'max-heap') defaultPayload = { input: [45, 20, 14, 12, 31, 7, 11], operations: [{ type: 'extract' }] };
     if (algorithm === 'trie') defaultPayload = { words: ['cat', 'car', 'cart', 'dog'], queries: [{ type: 'search', word: 'car' }, { type: 'delete', word: 'cat' }] };
+    if (algorithm === 'radix-sort') defaultPayload = { input: [170, 45, 75, 90, 802, 24, 2, 66] };
+    if (algorithm === 'bucket-sort') defaultPayload = { input: [0.42, 0.32, 0.73, 0.25, 0.52, 0.38, 0.91] };
+    if (algorithm === 'interpolation-search') defaultPayload = { input: [10, 20, 30, 40, 50, 60, 70, 80, 90], target: 70 };
+    if (algorithm === 'shell-sort') defaultPayload = { input: [12, 34, 54, 2, 3] };
+    if (algorithm === 'tree-sort') defaultPayload = { input: [50, 30, 70, 20, 40, 60, 80] };
+    if (algorithm === 'quick-sort') defaultPayload = { input: [8, 3, 1, 7, 0, 10, 2] };
 
     handleGenerateTrace(defaultPayload);
   }, [algorithm]);
@@ -258,31 +294,40 @@ export default function VisualizerPage() {
 
       {/* Main Visualizer Stage */}
       <div className="space-y-4">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={`${algorithm}-${currentStepIndex}`}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-          >
-            {algorithm === 'counting-sort' ? (
-              <CountingSortVisualizer step={currentStep} />
-            ) : algorithm === 'kmp' ? (
-              <KMPVisualizer step={currentStep} />
-            ) : algorithm === 'avl' ? (
-              <AVLVisualizer step={currentStep} />
-            ) : algorithm === 'bfs' || algorithm === 'dfs' || algorithm === 'dijkstra' ? (
-              <GraphVisualizer step={currentStep} />
-            ) : algorithm === 'min-heap' || algorithm === 'max-heap' ? (
-              <HeapVisualizer step={currentStep} />
-            ) : algorithm === 'trie' ? (
-              <TrieVisualizer step={currentStep} />
-            ) : (
-              <ArrayVisualizer step={currentStep} />
-            )}
-          </motion.div>
-        </AnimatePresence>
+        <motion.div
+          key={algorithm}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.25 }}
+        >
+          {algorithm === 'counting-sort' ? (
+            <CountingSortVisualizer step={currentStep} />
+          ) : algorithm === 'radix-sort' ? (
+            <RadixSortVisualizer step={currentStep} />
+          ) : algorithm === 'bucket-sort' ? (
+            <BucketSortVisualizer step={currentStep} />
+          ) : algorithm === 'interpolation-search' ? (
+            <InterpolationSearchVisualizer step={currentStep} />
+          ) : algorithm === 'shell-sort' ? (
+            <ShellSortVisualizer step={currentStep} />
+          ) : algorithm === 'tree-sort' ? (
+            <TreeSortVisualizer step={currentStep} />
+          ) : algorithm === 'quick-sort' ? (
+            <QuickSortVisualizer step={currentStep} />
+          ) : algorithm === 'kmp' ? (
+            <KMPVisualizer step={currentStep} />
+          ) : algorithm === 'avl' ? (
+            <AVLVisualizer step={currentStep} />
+          ) : algorithm === 'bfs' || algorithm === 'dfs' || algorithm === 'dijkstra' ? (
+            <GraphVisualizer step={currentStep} />
+          ) : algorithm === 'min-heap' || algorithm === 'max-heap' ? (
+            <HeapVisualizer step={currentStep} />
+          ) : algorithm === 'trie' ? (
+            <TrieVisualizer step={currentStep} />
+          ) : (
+            <ArrayVisualizer step={currentStep} />
+          )}
+        </motion.div>
 
         {/* Predict the Next Step Interactive Challenge */}
         <AnimatePresence>
@@ -425,6 +470,8 @@ export default function VisualizerPage() {
           totalSteps={steps.length}
           onStepChange={setCurrentStepIndex}
           isLoading={isLoading}
+          isPlaying={isPlaying}
+          onIsPlayingChange={setIsPlaying}
         />
       </div>
 
@@ -455,6 +502,8 @@ export default function VisualizerPage() {
         }
         code={meta.sourceCode.typescript}
         pseudocode={meta.pseudocode.join('\n')}
+        isOpen={isChatbotOpen}
+        onOpenChange={handleChatbotOpenChange}
       />
     </div>
   );

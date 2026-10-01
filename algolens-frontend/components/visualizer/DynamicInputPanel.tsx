@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlgorithmId } from '@/types';
 import { Play, Sparkles, Trash2, ArrowUpDown, Plus, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -50,6 +50,35 @@ export const DynamicInputPanel: React.FC<DynamicInputPanelProps> = ({
   // Validation
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (algorithm === 'radix-sort') {
+      const arr = [170, 45, 75, 90, 802, 24, 2, 66];
+      setArrayChips(arr);
+      setRawTextArray(arr.join(', '));
+    } else if (algorithm === 'bucket-sort') {
+      const arr = [0.42, 0.32, 0.73, 0.25, 0.52, 0.38, 0.91];
+      setArrayChips(arr);
+      setRawTextArray(arr.join(', '));
+    } else if (algorithm === 'interpolation-search') {
+      const arr = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+      setArrayChips(arr);
+      setRawTextArray(arr.join(', '));
+      setTargetVal(70);
+    } else if (algorithm === 'shell-sort') {
+      const arr = [12, 34, 54, 2, 3];
+      setArrayChips(arr);
+      setRawTextArray(arr.join(', '));
+    } else if (algorithm === 'tree-sort') {
+      const arr = [50, 30, 70, 20, 40, 60, 80];
+      setArrayChips(arr);
+      setRawTextArray(arr.join(', '));
+    } else if (algorithm === 'quick-sort') {
+      const arr = [8, 3, 1, 7, 0, 10, 2];
+      setArrayChips(arr);
+      setRawTextArray(arr.join(', '));
+    }
+  }, [algorithm]);
+
   const parseRawArray = (text: string): number[] => {
     return text
       .split(/[\s,]+/)
@@ -84,11 +113,29 @@ export const DynamicInputPanel: React.FC<DynamicInputPanelProps> = ({
   };
 
   const handleGenerateRandomArray = () => {
+    if (algorithm === 'bucket-sort') {
+      const randoms = Array.from({ length: 7 }, () => Math.round((Math.random() * 0.9 + 0.05) * 100) / 100);
+      setArrayChips(randoms);
+      setRawTextArray(randoms.join(', '));
+      setValidationError(null);
+      return;
+    }
+    if (algorithm === 'radix-sort') {
+      const randoms = Array.from({ length: 8 }, () => Math.floor(Math.random() * 950) + 1);
+      setArrayChips(randoms);
+      setRawTextArray(randoms.join(', '));
+      setValidationError(null);
+      return;
+    }
     const size = 8;
     const randoms = Array.from({ length: size }, () => Math.floor(Math.random() * 90) + 10);
     setArrayChips(randoms);
     setRawTextArray(randoms.join(', '));
-    if (algorithm === 'binary-search' || algorithm === 'fibonacci-search') {
+    if (
+      algorithm === 'binary-search' ||
+      algorithm === 'fibonacci-search' ||
+      algorithm === 'interpolation-search'
+    ) {
       const sorted = [...randoms].sort((a, b) => a - b);
       setArrayChips(sorted);
       setRawTextArray(sorted.join(', '));
@@ -107,7 +154,8 @@ export const DynamicInputPanel: React.FC<DynamicInputPanelProps> = ({
   const isSearchAlgo =
     algorithm === 'linear-search' ||
     algorithm === 'binary-search' ||
-    algorithm === 'fibonacci-search';
+    algorithm === 'fibonacci-search' ||
+    algorithm === 'interpolation-search';
 
   const isGraphAlgo =
     algorithm === 'bfs' || algorithm === 'dfs' || algorithm === 'dijkstra';
@@ -190,13 +238,24 @@ export const DynamicInputPanel: React.FC<DynamicInputPanelProps> = ({
     }
 
     if (
-      (algorithm === 'binary-search' || algorithm === 'fibonacci-search') &&
+      (algorithm === 'binary-search' ||
+        algorithm === 'fibonacci-search' ||
+        algorithm === 'interpolation-search') &&
       !isArraySorted()
     ) {
       setValidationError(
         'This algorithm requires a sorted array. Click "Sort Automatically" or enter sorted values.'
       );
       return;
+    }
+
+    if (algorithm === 'radix-sort') {
+      for (const num of arrayChips) {
+        if (!Number.isInteger(num) || num < 0) {
+          setValidationError('Radix Sort requires non-negative integers (e.g. 170, 45, 75, 90).');
+          return;
+        }
+      }
     }
 
     if (isSearchAlgo) {
