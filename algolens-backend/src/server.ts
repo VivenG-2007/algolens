@@ -122,8 +122,11 @@ const aiLimiter = rateLimit({
 });
 app.use('/api/ai', aiLimiter);
 
-// Register API Routes
+// Register Health Endpoints (Accessible via both /health and /api/health)
+app.use('/health', healthRouter);
 app.use('/api/health', healthRouter);
+
+// Register API Routes
 app.use('/api/auth', authRouter);
 app.use('/api/algorithms', algorithmRouter);
 app.use('/api/ai', aiRouter);
@@ -139,7 +142,8 @@ app.get('/', (req: Request, res: Response) => {
     tagline: 'See the Code. Understand the Algorithm.',
     status: 'online',
     documentation: '/docs/API.md',
-    healthCheck: '/api/health',
+    healthCheck: '/health',
+    apiHealthCheck: '/api/health',
   });
 });
 
@@ -181,7 +185,7 @@ app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`============================================================`);
   console.log(` Server active on port: ${PORT} (0.0.0.0)`);
   console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(` Health endpoint: http://localhost:${PORT}/api/health`);
+  console.log(` Health endpoints: http://localhost:${PORT}/health and /api/health`);
   console.log(` Allowed Origins: ${defaultAllowedOrigins.join(', ')}`);
   console.log(`============================================================`);
 });

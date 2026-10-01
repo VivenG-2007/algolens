@@ -11,21 +11,27 @@ export interface AIExplanationPayload {
   question?: string;
 }
 
-const SYSTEM_PROMPT = `You are AlgoLens Tutor.
-You are a patient, encouraging computer science teacher.
-The execution trace supplied by the backend is the absolute source of truth.
+const SYSTEM_PROMPT = `You are the AlgoLens Senior AI Tutor — an expert computer science educator and staff engineer.
 
-Rules:
-- NEVER invent array states, variable values, tree states, code execution, or algorithm results.
-- Only explain information contained in the supplied execution context.
-- Keep your explanation structured, concise, and pedagogical:
-  1. What happened in this step?
-  2. Why did it happen according to the algorithm rules?
-  3. Which code line caused it?
-  4. Which variables changed?
-  5. What changed visually on the screen?
-  6. What happens next?
-- Use simple, beginner-friendly language with clear markdown formatting.`;
+Your goal is to provide concise, human-understandable, and professional explanations of algorithm execution steps.
+
+STRICT WRITING GUIDELINES:
+- DO NOT use conversational filler, cheesy greetings ("Hello! 👋", "Let's walk through..."), or sign-offs. Jump straight into the explanation.
+- DO NOT generate giant markdown tables of raw variables or repeat values already displayed in the UI panels.
+- DO NOT output unrendered raw LaTeX blocks like \\[ \\text{mid} = \\dots \\]; use clean inline math (e.g. "mid = (0 + 1) / 2 = 0").
+- Never leave truncated sentences or trailing fragments.
+- Speak directly, like a top-tier senior engineer explaining code to a peer or student.
+- Format strictly with these 3 clean sections:
+  ### 🎯 Core Action
+  1-2 concise, plain-English sentences stating what happened in this step.
+
+  ### 💡 Intuition & Logic
+  Explain why the algorithm made this choice (the condition, formula, invariant, or comparison that triggered it).
+
+  ### ⏭️ What to Watch Next
+  1 sentence explaining what the algorithm focuses on in the immediate next step.
+
+- If the student asked a custom question, add an initial "### 💬 Answer" section addressing their question directly in 1-2 sharp paragraphs before the intuition.`;
 
 class AIService {
   private groqClient: Groq | null = null;
@@ -45,7 +51,7 @@ class AIService {
     source: 'groq' | 'cache' | 'fallback';
   }> {
     const cacheKey = cacheService.generateKey(
-      `ai:${payload.algorithm}:${payload.currentStep?.id}`,
+      `ai:v3:${payload.algorithm}:${payload.currentStep?.id}`,
       payload.question || 'general'
     );
 
@@ -247,29 +253,48 @@ Return strict JSON with fields: id, algorithmId, title, question, options (4 obj
       return 'No active execution step found to explain.';
     }
 
-    const varList = Object.entries(step.variables || {})
-      .map(([k, v]) => `• **${k}**: \`${v}\``)
-      .join('\n');
+    const algoName = payload.algorithm
+      .split('-')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
 
-    return `### 💡 AlgoLens Tutor Explanation
+    let logicWhy = `Following the core invariant of ${algoName} at algorithm step ${step.algorithmLine}.`;
+    if (step.comparisons) {
+      logicWhy = `Evaluated comparison: ${step.comparisons.result}. This comparison determines which element is placed or which pointer advances next.`;
+    } else if (step.variables?.mid !== undefined) {
+      const low = step.variables.low ?? 0;
+      const high = step.variables.high ?? 0;
+      const mid = step.variables.mid;
+      logicWhy = `Calculated midpoint: mid = floor((${low} + ${high}) / 2) = ${mid}. This divides the current subarray into two balanced subproblems.`;
+    } else if (step.operation === 'SWAP') {
+      logicWhy = `Swapped elements to restore the sorted partition invariant.`;
+    } else if (step.operation === 'PROBE') {
+      logicWhy = `Interpolated position based on relative value density: pos = ${step.variables?.pos ?? 'calculated'}.`;
+    }
 
-**Step ${step.id}: ${step.title}**
+    const nextMove = payload.nextStep
+      ? `The algorithm proceeds to **${payload.nextStep.title}**: ${payload.nextStep.description}`
+      : 'This is the final state. The algorithm has completed execution successfully.';
 
-1. **What happened?**
+    if (payload.question && payload.question !== 'Can you explain this step clearly and why it occurred?') {
+      return `### 💬 Answer
 ${step.description}
 
-2. **Why did it happen?**
-This step executed according to the core logic of **${payload.algorithm.toUpperCase()}** at algorithm line **${step.algorithmLine}**.
-${step.comparisons ? `The comparison evaluation was: \`${step.comparisons.result}\`.` : 'State transition completed based on active loop invariants.'}
+### 💡 Intuition & Logic
+${logicWhy}
 
-3. **Active Variables:**
-${varList || '• No local variables mutated in this step.'}
+### ⏭️ What to Watch Next
+${nextMove}`;
+    }
 
-4. **Visual Change:**
-${step.highlights && step.highlights.length > 0 ? `Indices [${step.highlights.join(', ')}] are highlighted to reflect current pointer positions and active comparisons.` : 'The data structure updated its state.'}
+    return `### 🎯 Core Action
+${step.description}
 
-5. **What happens next?**
-${payload.nextStep ? `Next operation: **${payload.nextStep.title}** (${payload.nextStep.description})` : 'This is the final state of the algorithm. Execution has concluded successfully.'}`;
+### 💡 Intuition & Logic
+${logicWhy}
+
+### ⏭️ What to Watch Next
+${nextMove}`;
   }
 }
 

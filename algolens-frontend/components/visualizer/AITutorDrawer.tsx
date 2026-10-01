@@ -26,6 +26,148 @@ interface AITutorDrawerProps {
   onOpenChange?: (open: boolean) => void;
 }
 
+interface FormattedExplanationProps {
+  text: string;
+}
+
+const FormattedExplanation: React.FC<FormattedExplanationProps> = ({ text }) => {
+  // 1. Sanitize text: remove boilerplate greetings, unrendered LaTeX, raw markdown tables, trailing fragments
+  const cleaned = text
+    .replace(/^##\s*Hello![\s\S]*?---\s*/i, '')
+    .replace(/^Let['’]s walk through[\s\S]*?\n\n/i, '')
+    .replace(/\\left\\lfloor\\frac\{([^}]+)\}\{([^}]+)\}\\right\\rfloor/g, 'floor(($1) / $2)')
+    .replace(/\\left\lfloor\\frac\{([^}]+)\}\{([^}]+)\}\\right\rfloor/g, 'floor(($1) / $2)')
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1 / $2)')
+    .replace(/\\text\{([^}]+)\}/g, '$1')
+    .replace(/\\\[/g, '')
+    .replace(/\\\]/g, '')
+    .replace(/\$\$[\s\S]*?\$\$/g, (m) => m.replace(/\$\$/g, '').trim())
+    .replace(/\|[^\n]+\|\n\|[-:\s|]+\|\n(?:\|[^\n]+\|\n?)*/g, '')
+    .replace(/###\s*\d*\.?\s*Which variables changed\?[\s\S]*?(?=###|$)/gi, '')
+    .replace(/No comparisons were performed.*$/i, '')
+    .trim();
+
+  // Split by markdown sections (### ...)
+  const rawSections = cleaned.split(/(?=###\s+)/g).filter(Boolean);
+
+  const sections =
+    rawSections.length > 0 && cleaned.includes('###')
+      ? rawSections
+          .map((sec) => {
+            const lines = sec.trim().split('\n');
+            const header = lines[0].replace(/^###\s+/, '').trim();
+            const body = lines.slice(1).join('\n').trim();
+            return { header, body };
+          })
+          .filter((s) => s.body.length > 0 || s.header.length > 0)
+      : [{ header: 'Core Action', body: cleaned }];
+
+  const getSectionTheme = (header: string) => {
+    const h = header.toLowerCase();
+    if (h.includes('action') || h.includes('what happened') || h.includes('core')) {
+      return {
+        badgeBg: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+        cardBg: 'bg-cyan-950/20 border-cyan-800/40',
+        icon: '🎯',
+      };
+    }
+    if (h.includes('logic') || h.includes('intuition') || h.includes('why')) {
+      return {
+        badgeBg: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+        cardBg: 'bg-amber-950/20 border-amber-800/40',
+        icon: '💡',
+      };
+    }
+    if (h.includes('next') || h.includes('watch')) {
+      return {
+        badgeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+        cardBg: 'bg-emerald-950/20 border-emerald-800/40',
+        icon: '⏭️',
+      };
+    }
+    return {
+      badgeBg: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+      cardBg: 'bg-slate-900/60 border-slate-800',
+      icon: '💬',
+    };
+  };
+
+  const renderInlineFormatted = (str: string) => {
+    const parts = str.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('`') && part.endsWith('`')) {
+        return (
+          <code
+            key={i}
+            className="px-1.5 py-0.5 rounded bg-slate-800 text-brand-300 font-mono text-[11px] border border-slate-700/60"
+          >
+            {part.slice(1, -1)}
+          </code>
+        );
+      }
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return (
+          <strong key={i} className="text-white font-semibold">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      return part;
+    });
+  };
+
+  return (
+    <div className="space-y-3">
+      {sections.map((sec, idx) => {
+        const theme = getSectionTheme(sec.header);
+        const paragraphs = sec.body.split('\n\n').filter(Boolean);
+        const cleanTitle = sec.header.replace(/^[🎯💡⏭️💬\d\.\s]+/, '').trim() || sec.header;
+
+        return (
+          <div
+            key={idx}
+            className={`p-3.5 rounded-xl border ${theme.cardBg} transition-all duration-200`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span
+                className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border flex items-center gap-1.5 ${theme.badgeBg}`}
+              >
+                <span>{theme.icon}</span>
+                <span>{cleanTitle}</span>
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-300 leading-relaxed font-sans">
+              {paragraphs.map((p, pIdx) => {
+                if (p.trim().startsWith('- ') || p.trim().startsWith('* ')) {
+                  const listItems = p
+                    .trim()
+                    .split('\n')
+                    .map((li) => li.replace(/^[-*]\s+/, '').trim());
+                  return (
+                    <ul key={pIdx} className="space-y-1 list-disc list-inside text-slate-300 pl-1">
+                      {listItems.map((item, liIdx) => (
+                        <li key={liIdx} className="leading-relaxed">
+                          {renderInlineFormatted(item)}
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                }
+                return (
+                  <p key={pIdx} className="leading-relaxed">
+                    {renderInlineFormatted(p)}
+                  </p>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
   algorithm,
   currentStep,
@@ -210,9 +352,7 @@ export const AITutorDrawer: React.FC<AITutorDrawerProps> = ({
                         </span>
                       </div>
 
-                      <div className="prose prose-invert prose-xs text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-900/60 p-4 rounded-lg border border-slate-800">
-                        {explanation}
-                      </div>
+                      <FormattedExplanation text={explanation} />
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center text-slate-500">

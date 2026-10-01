@@ -18,7 +18,9 @@ import {
   ShieldCheck,
   Network,
   GitBranch,
+  Lock,
 } from 'lucide-react';
+import { useAuth } from '@/lib/context/AuthContext';
 
 const staggerContainer: Variants = {
   hidden: {},
@@ -30,6 +32,7 @@ const fadeUp: Variants = {
 };
 
 export default function HomePage() {
+  const { user, setIsAuthModalOpen } = useAuth();
   const algoRef = useRef<HTMLElement>(null);
   const archRef = useRef<HTMLElement>(null);
   const algoInView = useInView(algoRef, { once: true, margin: '-80px' });
@@ -255,20 +258,43 @@ export default function HomePage() {
               transition={{ delay: 0.3 }}
               className="flex flex-wrap items-center justify-center gap-4 pt-2"
             >
-              <Link
-                href="/visualizer/merge-sort"
-                className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-brand-600 to-accent-indigo hover:from-brand-500 hover:to-accent-indigo text-white font-semibold text-sm rounded-xl shadow-glow transition transform hover:scale-105"
-              >
-                <Play className="w-4 h-4 fill-current" />
-                <span>Launch Merge Sort Visualizer</span>
-              </Link>
-              <Link
-                href="/learn"
-                className="inline-flex items-center gap-2 px-6 py-3.5 bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-sm rounded-xl border border-slate-700 transition"
-              >
-                <span>Browse 13 Algorithms</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              {user ? (
+                <Link
+                  href="/visualizer/merge-sort"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-brand-600 to-accent-indigo hover:from-brand-500 hover:to-accent-indigo text-white font-semibold text-sm rounded-xl shadow-glow transition transform hover:scale-105"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>Launch Merge Sort Visualizer</span>
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-brand-600 to-accent-indigo hover:from-brand-500 hover:to-accent-indigo text-white font-semibold text-sm rounded-xl shadow-glow transition transform hover:scale-105"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>Sign In to Launch Engine</span>
+                </button>
+              )}
+              {user ? (
+                <Link
+                  href="/learn"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-sm rounded-xl border border-slate-700 transition"
+                >
+                  <span>Browse 13 Algorithms</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-6 py-3.5 bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-sm rounded-xl border border-slate-700 transition"
+                >
+                  <Lock className="w-4 h-4 text-slate-400" />
+                  <span>Explore Algorithms</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
             </motion.div>
           </div>
 
@@ -381,13 +407,25 @@ export default function HomePage() {
 
                 <div className="pt-5 mt-4 border-t border-dark-border/60 flex items-center justify-between">
                   <span className="text-[11px] text-slate-500">Live Tracing</span>
-                  <Link
-                    href={`/visualizer/${algo.id}`}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-400 group-hover:text-brand-300 transition"
-                  >
-                    <span>Visualize</span>
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
-                  </Link>
+                  {user ? (
+                    <Link
+                      href={`/visualizer/${algo.id}`}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-400 group-hover:text-brand-300 transition"
+                    >
+                      <span>Visualize</span>
+                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsAuthModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-400 hover:text-brand-300 transition"
+                    >
+                      <Lock className="w-3 h-3 text-brand-400/80" />
+                      <span>Unlock Engine</span>
+                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ))}

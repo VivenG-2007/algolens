@@ -157,9 +157,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         handlePersist(res.user, res.token);
         setAuthSuccess(`Logged into ${res.user.fullName} (${res.user.skillLevel}) account!`);
         setTimeout(() => setIsAuthModalOpen(false), 500);
+        return;
       }
     } catch (err: any) {
-      setAuthError(err.message || 'Failed to authenticate sample account.');
+      console.warn('Backend demo auth unreachable, using local demo profile fallback:', err.message);
+      const demoUsers = {
+        beginner: {
+          id: 'demo-beginner-user',
+          email: 'alex.chen@university.edu',
+          username: 'alex_cs',
+          fullName: 'Alex Chen',
+          skillLevel: 'Beginner' as SkillLevel,
+        },
+        intermediate: {
+          id: 'demo-intermediate-user',
+          email: 'maya.lin@polytechnic.edu',
+          username: 'maya_algo',
+          fullName: 'Maya Lin',
+          skillLevel: 'Intermediate' as SkillLevel,
+        },
+        advanced: {
+          id: 'demo-advanced-user',
+          email: 'dev.patel@techinstitute.edu',
+          username: 'dev_algo_master',
+          fullName: 'Dev Patel',
+          skillLevel: 'Advanced' as SkillLevel,
+        },
+      };
+      const fallbackUser = demoUsers[role] || demoUsers.intermediate;
+      const fallbackToken = `demo-token-${role}`;
+      handlePersist(fallbackUser, fallbackToken);
+      setAuthSuccess(`Logged into ${fallbackUser.fullName} (${fallbackUser.skillLevel})!`);
+      setTimeout(() => setIsAuthModalOpen(false), 500);
     } finally {
       setIsSubmitting(false);
     }
@@ -184,6 +213,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('algolens_user');
       localStorage.removeItem('algolens_token');
     } catch {}
+    if (typeof window !== 'undefined') {
+      window.location.href = '/';
+    }
   };
 
   const requireAuth = (action: () => void) => {

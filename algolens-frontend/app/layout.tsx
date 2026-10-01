@@ -21,6 +21,8 @@ export const metadata: Metadata = {
   ],
 };
 
+import { AuthGuard } from '@/components/auth/AuthGuard';
+
 export default function RootLayout({
   children,
 }: {
@@ -31,7 +33,9 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col bg-dark-bg text-slate-100 antialiased selection:bg-brand-500 selection:text-white">
         <AuthProvider>
           <Navbar />
-          <main className="flex-1">{children}</main>
+          <main className="flex-1">
+            <AuthGuard>{children}</AuthGuard>
+          </main>
           <Footer />
         </AuthProvider>
       </body>
