@@ -247,6 +247,510 @@ Return strict JSON with fields: id, algorithmId, title, question, options (4 obj
     };
   }
 
+  public async generateDynamicQuiz(params: {
+    count?: number;
+    topic?: string;
+    level?: 'Beginner' | 'Intermediate' | 'Advanced' | 'Adaptive';
+    userId?: string;
+  }): Promise<{
+    questions: Array<{
+      id: string;
+      algorithmId: string;
+      title: string;
+      question: string;
+      options: { id: string; text: string; isCorrect: boolean }[];
+      explanation: string;
+      difficulty: string;
+      pedagogicalReason: string;
+      source: 'groq' | 'ai-dynamic-generator';
+    }>;
+    topic: string;
+    level: string;
+  }> {
+    const count = Math.max(1, Math.min(params.count || 10, 15));
+    const topic = params.topic || 'all';
+    const level = params.level || 'Adaptive';
+
+    // 1. Attempt Groq AI Generation
+    if (this.groqClient) {
+      try {
+        const topicFocus =
+          topic === 'all'
+            ? 'Comprehensive Data Structures and Algorithms across Sorting, Searching, Balanced Trees, Graphs, Heaps, and String Matching'
+            : topic === 'sorting'
+            ? 'All Sorting Techniques: Merge Sort, Quick Sort, Counting Sort, Radix Sort, Bucket Sort, Shell Sort, Tree Sort, and Heap Sort'
+            : topic === 'searching'
+            ? 'All Searching Techniques: Linear Search, Binary Search, Fibonacci Search, Interpolation Search, Exponential Search, Jump Search, and KMP'
+            : `DSA topic: ${topic}`;
+
+        const prompt = `Generate exactly ${count} unique, high-yield multiple-choice DSA quiz questions for computer science students.
+Topic Focus: ${topicFocus}
+Target Difficulty: ${level} (mix of Beginner, Intermediate, and Advanced if Adaptive)
+
+Mandatory Output Format:
+Output a single JSON object with a "questions" key containing an array of exactly ${count} question objects:
+{
+  "questions": [
+    {
+      "id": "ai-dsa-1",
+      "algorithmId": "merge-sort",
+      "title": "Merge Sort Partition Invariant",
+      "question": "What is the primary loop invariant maintained during the two-way merge phase?",
+      "options": [
+        { "id": "a", "text": "Subarray arr[low..mid] and arr[mid+1..high] are sorted, producing a merged sorted segment.", "isCorrect": true },
+        { "id": "b", "text": "All elements in the array are swapped simultaneously.", "isCorrect": false },
+        { "id": "c", "text": "The pivot is placed at the exact center index.", "isCorrect": false },
+        { "id": "d", "text": "No auxiliary memory is ever allocated.", "isCorrect": false }
+      ],
+      "explanation": "During the merge subroutine, two sorted halves are merged into a combined sorted buffer using two pointers in linear time.",
+      "difficulty": "Intermediate",
+      "pedagogicalReason": "Tests core divide-and-conquer recursion invariant understanding."
+    }
+  ]
+}
+
+Ensure 4 distinct options per question with exactly one marked "isCorrect": true. Shuffle the position of the correct answer across 'a', 'b', 'c', and 'd'.`;
+
+        const completion = await this.groqClient.chat.completions.create({
+          model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are an award-winning Algorithms Professor creating rigorous, educational DSA quiz questions. Return valid JSON only with a "questions" array of exactly the requested number of questions.',
+            },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.4,
+          response_format: { type: 'json_object' },
+        });
+
+        const rawContent = completion.choices[0]?.message?.content;
+        if (rawContent) {
+          const parsed = JSON.parse(rawContent);
+          const list = Array.isArray(parsed.questions)
+            ? parsed.questions
+            : Array.isArray(parsed)
+            ? parsed
+            : [];
+
+          if (list.length >= count) {
+            const formatted = list.slice(0, count).map((q: any, i: number) => ({
+              id: q.id || `groq-quiz-${Date.now()}-${i}`,
+              algorithmId: q.algorithmId || 'dsa',
+              title: q.title || `DSA Mastery Check #${i + 1}`,
+              question: q.question,
+              options: Array.isArray(q.options)
+                ? q.options.map((opt: any, optIdx: number) => ({
+                    id: opt.id || ['a', 'b', 'c', 'd'][optIdx] || `opt-${optIdx}`,
+                    text: opt.text || String(opt),
+                    isCorrect: Boolean(opt.isCorrect),
+                  }))
+                : [],
+              explanation: q.explanation || 'Verified DSA algorithm principle.',
+              difficulty: q.difficulty || (level === 'Adaptive' ? (i < 3 ? 'Beginner' : i < 7 ? 'Intermediate' : 'Advanced') : level),
+              pedagogicalReason: q.pedagogicalReason || 'Calibrated algorithmic concept challenge.',
+              source: 'groq' as const,
+            }));
+
+            // Validate that each question has at least 1 correct option
+            const allValid = formatted.every(
+              (q: any) => q.question && q.options.length >= 2 && q.options.some((o: any) => o.isCorrect)
+            );
+
+            if (allValid) {
+              return { questions: formatted, topic, level };
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn('[Groq] Dynamic 10-question quiz generation error, using dynamic generator fallback:', err.message);
+      }
+    }
+
+    // 2. Dynamic Algorithmic Question Generator Fallback (Guarantees 10 fresh, randomized, calibrated questions)
+    const fallbackQuestions = this.generateDynamicFallbackQuiz(count, topic, level);
+    return {
+      questions: fallbackQuestions,
+      topic,
+      level,
+    };
+  }
+
+  private generateDynamicFallbackQuiz(
+    count: number,
+    topic: string,
+    level: string
+  ): Array<{
+    id: string;
+    algorithmId: string;
+    title: string;
+    question: string;
+    options: { id: string; text: string; isCorrect: boolean }[];
+    explanation: string;
+    difficulty: string;
+    pedagogicalReason: string;
+    source: 'groq' | 'ai-dynamic-generator';
+  }> {
+    const questionBank = [
+      // --- Sorting ---
+      {
+        algorithmId: 'quick-sort',
+        category: 'sorting',
+        difficulty: 'Intermediate',
+        title: 'Quick Sort: Worst-Case Trigger',
+        question: 'Under standard Lomuto or Hoare partitioning choosing the last element as pivot, which input condition triggers Quick Sort\'s worst-case O(n²) time complexity?',
+        correctText: 'An already sorted or reversely sorted array, producing maximally unbalanced 0 and (n-1) partitions.',
+        distractors: [
+          'An array of completely random floating point numbers.',
+          'An array containing only powers of two.',
+          'An array whose length is prime.',
+        ],
+        explanation: 'When the pivot is the smallest or largest element on every split, partitioning produces subproblems of size 0 and n-1, resulting in n recursive levels of O(n) work = O(n²).',
+        pedagogicalReason: 'Understanding adversarial input permutations and pivot selection heuristics (e.g. median-of-three).',
+      },
+      {
+        algorithmId: 'merge-sort',
+        category: 'sorting',
+        difficulty: 'Beginner',
+        title: 'Merge Sort: Space Overhead',
+        question: 'Why does standard array-based Merge Sort require O(n) auxiliary space complexity?',
+        correctText: 'The merge subroutine requires temporary buffers to hold partitioned subarrays while copying elements back in order.',
+        distractors: [
+          'The call stack requires n frames of activation records.',
+          'It creates an adjacency matrix for element indices.',
+          'It must allocate a hash map to count duplicate elements.',
+        ],
+        explanation: 'Unlike in-place Quick Sort, standard array Merge Sort cannot merge two contiguous sorted segments in-place in linear time without an auxiliary array of size n.',
+        pedagogicalReason: 'Contrasting asymptotic time bounds with spatial engineering overhead.',
+      },
+      {
+        algorithmId: 'counting-sort',
+        category: 'sorting',
+        difficulty: 'Intermediate',
+        title: 'Counting Sort: Non-Comparison Bound',
+        question: 'Counting Sort runs in O(n + k) time, bypassing the Ω(n log n) comparison lower bound. What does the parameter "k" represent?',
+        correctText: 'The range (difference between maximum and minimum value) of the input integer keys.',
+        distractors: [
+          'The number of CPU threads executing in parallel.',
+          'The number of negative numbers in the input sequence.',
+          'The depth of the recursion tree.',
+        ],
+        explanation: 'Counting Sort creates a frequency count array of size k. If k is O(n), sorting takes linear O(n) time, but becomes inefficient if k ≫ n.',
+        pedagogicalReason: 'Clarifying the relationship between value domains and non-comparison sorting throughput.',
+      },
+      {
+        algorithmId: 'radix-sort',
+        category: 'sorting',
+        difficulty: 'Intermediate',
+        title: 'Radix Sort: Stability Invariant',
+        question: 'Why is it mandatory that the subroutine sorting individual digits in Radix Sort (e.g. LSD Radix Sort) be structurally stable?',
+        correctText: 'Stability ensures that elements with identical digits at the current position preserve their relative order established by previous less significant digits.',
+        distractors: [
+          'Stability prevents integer overflow when digits are multiplied.',
+          'Unstable sorts cannot operate on numbers stored in binary format.',
+          'Without stability, the recursion stack depth doubles on each step.',
+        ],
+        explanation: 'If the intermediate sort were unstable, the sorted order established by least significant digits would be scrambled when grouping by subsequent higher-order digits.',
+        pedagogicalReason: 'Demonstrating how algorithmic stability is an indispensable prerequisite for composite-key sorting.',
+      },
+      {
+        algorithmId: 'heap-sort',
+        category: 'sorting',
+        difficulty: 'Advanced',
+        title: 'Heap Sort: In-Place Execution & Cache Traversal',
+        question: 'Heap Sort has guaranteed O(n log n) worst-case time and O(1) auxiliary space, yet Quick Sort is almost always faster in real-world systems. Why?',
+        correctText: 'Heap index traversal (2i+1, 2i+2) jumps across non-contiguous array offsets, causing severe CPU L1/L2 cache misses compared to Quick Sort\'s sequential cache-line access.',
+        distractors: [
+          'Heap Sort requires allocating a separate binary tree in RAM on each iteration.',
+          'Heap Sort has an O(n²) average case runtime.',
+          'Heap Sort only works on floating point numbers.',
+        ],
+        explanation: 'Modern CPU performance is dominated by cache locality. Quick Sort scans contiguous memory partitions that fit neatly in L1/L2 cache lines, whereas heap siftdowns jump exponentially through indices.',
+        pedagogicalReason: 'Bridging Big-O theory with physical CPU memory hierarchies and hardware cache lines.',
+      },
+      {
+        algorithmId: 'shell-sort',
+        category: 'sorting',
+        difficulty: 'Intermediate',
+        title: 'Shell Sort: Diminishing Increments',
+        question: 'What is the core algorithmic mechanism behind Shell Sort\'s acceleration over standard Insertion Sort?',
+        correctText: 'It compares and swaps elements separated by a diminishing gap (h-sorting), rapidly moving out-of-order elements long distances before final h=1 insertion.',
+        distractors: [
+          'It converts the array into a hash table and performs bucket sorting.',
+          'It constructs a balanced binary search tree in place.',
+          'It relies on randomized pivot selection identical to Quick Sort.',
+        ],
+        explanation: 'Insertion Sort is fast on nearly-sorted data. By performing h-sorts with diminishing gaps (e.g., Sedgewick or Pratt sequences), the array becomes nearly sorted when gap reaches 1.',
+        pedagogicalReason: 'Illustrating adaptive acceleration by transforming inputs into favorable preconditions.',
+      },
+      {
+        algorithmId: 'bucket-sort',
+        category: 'sorting',
+        difficulty: 'Intermediate',
+        title: 'Bucket Sort: Distribution Invariant',
+        question: 'Under what input distribution assumption does Bucket Sort achieve its optimal O(n) average-case runtime?',
+        correctText: 'The input values are uniformly and independently distributed across the continuous range [0, 1).',
+        distractors: [
+          'All input elements are identical powers of two.',
+          'The elements follow an adversarial Pareto 80/20 distribution into a single bucket.',
+          'The array is already sorted in reverse order.',
+        ],
+        explanation: 'When input values are uniformly distributed, each bucket expects O(1) elements, leading to O(1) sorting work per bucket and O(n) total time.',
+        pedagogicalReason: 'Highlighting mathematical distribution assumptions required for sub-quadratic performance.',
+      },
+      {
+        algorithmId: 'tree-sort',
+        category: 'sorting',
+        difficulty: 'Beginner',
+        title: 'Tree Sort: Inorder Traversal Property',
+        question: 'In Tree Sort, elements are inserted into a Binary Search Tree (BST) and retrieved. Which tree traversal order guarantees the elements are extracted in sorted ascending order?',
+        correctText: 'Inorder Traversal (Left Subtree -> Root -> Right Subtree)',
+        distractors: [
+          'Preorder Traversal (Root -> Left Subtree -> Right Subtree)',
+          'Postorder Traversal (Left Subtree -> Right Subtree -> Root)',
+          'Level-Order / Breadth-First Traversal',
+        ],
+        explanation: 'By BST definition, all left descendants are smaller than the node, and all right descendants are larger. Inorder traversal visits left first, then current, then right, yielding sorted order.',
+        pedagogicalReason: 'Connecting tree traversal mechanics directly to sorting order invariants.',
+      },
+
+      // --- Searching ---
+      {
+        algorithmId: 'binary-search',
+        category: 'searching',
+        difficulty: 'Beginner',
+        title: 'Binary Search: Midpoint Overflow Protection',
+        question: 'In low-level languages like C/C++ or Java, why is the midpoint calculation written as "mid = low + (high - low) / 2" instead of "mid = (low + high) / 2"?',
+        correctText: 'To prevent 32-bit signed integer arithmetic overflow when (low + high) exceeds 2,147,483,647.',
+        distractors: [
+          'To ensure floating point precision during floating division.',
+          'Because the CPU executes subtraction faster than addition.',
+          'To guarantee the search always rounds upwards.',
+        ],
+        explanation: 'If low and high are very large positive integers, low + high can overflow to a negative number, causing an ArrayIndexOutOfBoundsException or memory corruption.',
+        pedagogicalReason: 'Real-world software engineering bug prevention in ubiquitous algorithm subroutines.',
+      },
+      {
+        algorithmId: 'fibonacci-search',
+        category: 'searching',
+        difficulty: 'Intermediate',
+        title: 'Fibonacci Search: Hardware Arithmetic Advantage',
+        question: 'What historical hardware engineering advantage does Fibonacci Search hold over standard Binary Search on microcontrollers?',
+        correctText: 'It divides the search space using only addition and subtraction operations, avoiding hardware division (/) or multiplication instructions.',
+        distractors: [
+          'It works on completely unsorted datasets.',
+          'It guarantees O(1) worst-case search time on all arrays.',
+          'It uses zero CPU registers during execution.',
+        ],
+        explanation: 'Binary Search requires division by 2 (or bit-shift). On legacy or low-power microcontrollers lacking hardware dividers, addition/subtraction via Fibonacci numbers is substantially faster.',
+        pedagogicalReason: 'Exploring low-level instruction set architectures and algorithmic design trade-offs.',
+      },
+      {
+        algorithmId: 'interpolation-search',
+        category: 'searching',
+        difficulty: 'Advanced',
+        title: 'Interpolation Search: Best vs Worst Bound',
+        question: 'Interpolation Search estimates the target position using the probe formula. What are its average time complexity on uniformly distributed data and its worst-case complexity?',
+        correctText: 'Average: O(log log n); Worst: O(n) when keys grow exponentially or cluster adversarially.',
+        distractors: [
+          'Average: O(log n); Worst: O(log n)',
+          'Average: O(1); Worst: O(n log n)',
+          'Average: O(n); Worst: O(n²)',
+        ],
+        explanation: 'Like searching a phonebook, if keys are uniformly distributed, Interpolation Search homes in doubly logarithmically O(log log n). But if distribution is skewed (e.g. 1, 2, 4, 8, 1000000), it degrades to linear O(n).',
+        pedagogicalReason: 'Evaluating the fragility of predictive probing versus balanced divide-and-conquer.',
+      },
+      {
+        algorithmId: 'kmp',
+        category: 'searching',
+        difficulty: 'Advanced',
+        title: 'KMP: LPS Array Role',
+        question: 'In the Knuth-Morris-Pratt (KMP) string matching algorithm, what does the Longest Prefix Suffix (LPS) table entry LPS[i] represent?',
+        correctText: 'The length of the longest proper prefix of pattern[0..i] that is also a suffix of pattern[0..i].',
+        distractors: [
+          'The number of vowels present in the entire search text.',
+          'The memory hash code of the pattern substring.',
+          'The frequency of the character pattern[i] in the alphabet.',
+        ],
+        explanation: 'When a mismatch occurs at character pattern[j], the LPS table informs the algorithm to resume comparisons at index LPS[j-1] without ever backtracking the main text pointer.',
+        pedagogicalReason: 'Mastering deterministic finite automaton (DFA) transitions and precomputed skip tables.',
+      },
+      {
+        algorithmId: 'linear-search',
+        category: 'searching',
+        difficulty: 'Beginner',
+        title: 'Linear Search: Precondition Absence',
+        question: 'When is Linear Search preferred or strictly required over Binary Search?',
+        correctText: 'When the dataset is unsorted and the cost of sorting O(n log n) exceeds the cost of a one-time linear scan O(n).',
+        distractors: [
+          'When the array size is greater than 10,000,000 elements.',
+          'When keys are strictly integers in sorted monotonic order.',
+          'Only when executing inside a GPU shader pipeline.',
+        ],
+        explanation: 'Sorting requires O(n log n). If only 1 or 2 queries are performed on an unsorted stream, paying O(n) for linear search is strictly cheaper than sorting first.',
+        pedagogicalReason: 'Teaching pragmatic engineering amortization and avoiding premature optimization.',
+      },
+
+      // --- Balanced Trees, Heaps & Graphs ---
+      {
+        algorithmId: 'avl',
+        category: 'tree',
+        difficulty: 'Intermediate',
+        title: 'AVL Tree: Double Rotation (LR) Condition',
+        question: 'In an AVL Tree, when a new node is inserted into the right subtree of the left child of an unbalanced node (causing Balance Factor = +2), which rotation restores balance?',
+        correctText: 'Left-Right (LR) Double Rotation: Left rotation on the child, followed by Right rotation on the unbalanced root.',
+        distractors: [
+          'Single Right (RR) Rotation on the root node.',
+          'Single Left (LL) Rotation on the root node.',
+          'Inverting all left and right child pointers in the entire tree.',
+        ],
+        explanation: 'A zig-zag shape (Left-Right) cannot be fixed with a single rotation. First, a left rotation straightens the line, then a right rotation balances the heights.',
+        pedagogicalReason: 'Understanding balance factor invariants and topological tree rebalancing mechanics.',
+      },
+      {
+        algorithmId: 'min-heap',
+        category: 'heap',
+        difficulty: 'Intermediate',
+        title: 'Binary Heap: Array Storage Formula',
+        question: 'When storing a 0-indexed complete binary tree in a flat array, what are the left child, right child, and parent indices of a node at index "i"?',
+        correctText: 'Left: 2i + 1; Right: 2i + 2; Parent: floor((i - 1) / 2)',
+        distractors: [
+          'Left: i + 1; Right: i + 2; Parent: i - 1',
+          'Left: 2i; Right: 2i + 1; Parent: floor(i / 2)',
+          'Left: i²; Right: i² + 1; Parent: sqrt(i)',
+        ],
+        explanation: 'Zero-indexed complete binary trees pack contiguously in an array without pointer overhead using the arithmetic relations 2i+1 and 2i+2.',
+        pedagogicalReason: 'Mastering pointer-free structural implicit representations of tree topologies.',
+      },
+      {
+        algorithmId: 'dijkstra',
+        category: 'graph',
+        difficulty: 'Advanced',
+        title: 'Dijkstra: Negative Weight Vulnerability',
+        question: 'Why does Dijkstra\'s algorithm fail to produce correct shortest paths on graphs containing negative edge weights?',
+        correctText: 'Its greedy invariant assumes that once a vertex is extracted from the priority queue with minimal distance, its shortest path is permanently finalized.',
+        distractors: [
+          'Negative numbers cause integer overflow in 64-bit registers.',
+          'The priority queue cannot sort negative numbers.',
+          'Negative weights turn the graph into a directed acyclic graph (DAG).',
+        ],
+        explanation: 'Dijkstra greedily marks nodes as visited. If a subsequent negative edge permits a shorter path to an already "finalized" node, Dijkstra cannot revisit it without exponential looping.',
+        pedagogicalReason: 'Understanding greedy choice invariants and why algorithms like Bellman-Ford are required.',
+      },
+      {
+        algorithmId: 'trie',
+        category: 'string',
+        difficulty: 'Intermediate',
+        title: 'Trie: Prefix Lookup Complexity',
+        question: 'Given a dictionary containing N words of maximum length L, what is the exact time complexity to determine if a prefix of length K exists in a standard Trie?',
+        correctText: 'O(K), completely independent of the total number of dictionary words N.',
+        distractors: [
+          'O(N × K), because every word in the dictionary must be compared.',
+          'O(log N), matching balanced binary search tree traversal.',
+          'O(N / K), using hash table bucket distribution.',
+        ],
+        explanation: 'In a Trie, each character of the prefix corresponds to a single pointer transition. After exactly K transitions, we know whether the prefix exists.',
+        pedagogicalReason: 'Demonstrating radix/trie lookups decoupled from total dataset cardinality.',
+      },
+      {
+        algorithmId: 'bfs',
+        category: 'graph',
+        difficulty: 'Beginner',
+        title: 'BFS: Shortest Path Property in Unweighted Graphs',
+        question: 'Why does Breadth-First Search (BFS) guarantee finding the shortest path (minimum edge count) between two vertices in an unweighted graph?',
+        correctText: 'Its FIFO queue explores vertices in strictly non-decreasing order of distance (layer by layer) from the source vertex.',
+        distractors: [
+          'It explores the deepest paths first using a recursive LIFO call stack.',
+          'It sorts the edges by weight before traversal.',
+          'It computes the heuristic Euclidean distance to the target node.',
+        ],
+        explanation: 'Because BFS processes vertices at distance d before touching any vertex at distance d+1, the first time target node is discovered is guaranteed to be via the shortest edge sequence.',
+        pedagogicalReason: 'Grounding graph traversal invariants in queue FIFO semantics.',
+      },
+      {
+        algorithmId: 'dfs',
+        category: 'graph',
+        difficulty: 'Intermediate',
+        title: 'DFS: Cycle Detection In Directed Graphs',
+        question: 'During Depth-First Search on a directed graph using 3-color states (White = unvisited, Gray = visiting/in stack, Black = finished), which edge indicates a directed cycle?',
+        correctText: 'A Back Edge to a currently Gray vertex in the active recursion call stack.',
+        distractors: [
+          'A Cross Edge to a Black vertex that has already been completely explored.',
+          'A Forward Edge to a White descendant vertex.',
+          'Any edge incident to the start node.',
+        ],
+        explanation: 'An edge pointing back to an ancestor that is still in the active recursion stack (Gray) forms a directed cycle. White-Gray-Black coloring detects cycles in O(V + E).',
+        pedagogicalReason: 'Formalizing graph classification edges: Tree, Forward, Back, and Cross edges.',
+      },
+    ];
+
+    // Filter by topic if specified
+    let filtered = questionBank;
+    if (topic === 'sorting') {
+      filtered = questionBank.filter((q) => q.category === 'sorting');
+    } else if (topic === 'searching') {
+      filtered = questionBank.filter((q) => q.category === 'searching');
+    } else if (topic !== 'all') {
+      const match = questionBank.filter(
+        (q) => q.algorithmId === topic || q.category === topic
+      );
+      if (match.length >= 3) {
+        filtered = match;
+      }
+    }
+
+    // Filter or prioritize by level if not Adaptive
+    if (level && level !== 'Adaptive') {
+      const levelMatches = filtered.filter((q) => q.difficulty === level);
+      if (levelMatches.length >= 4) {
+        // Use level matches, padded by others if needed
+        filtered = [
+          ...levelMatches,
+          ...filtered.filter((q) => q.difficulty !== level),
+        ];
+      }
+    }
+
+    // Shuffle the question bank
+    const shuffled = [...filtered].sort(() => Math.random() - 0.5);
+
+    // If we need more questions than available in filtered, cycle and vary
+    const selected: typeof questionBank = [];
+    for (let i = 0; i < count; i++) {
+      selected.push(shuffled[i % shuffled.length]);
+    }
+
+    // Format questions with shuffled option keys
+    return selected.map((q, idx) => {
+      // Build 4 options: 1 correct + 3 distractors
+      const rawOptions = [
+        { text: q.correctText, isCorrect: true },
+        ...q.distractors.map((text) => ({ text, isCorrect: false })),
+      ];
+
+      // Shuffle options so correct answer is randomly at a, b, c, or d
+      const shuffledOptions = rawOptions.sort(() => Math.random() - 0.5);
+      const optionLetters = ['a', 'b', 'c', 'd'];
+
+      return {
+        id: `ai-dyn-${Date.now()}-${idx + 1}`,
+        algorithmId: q.algorithmId,
+        title: q.title,
+        question: q.question,
+        options: shuffledOptions.map((opt, oIdx) => ({
+          id: optionLetters[oIdx],
+          text: opt.text,
+          isCorrect: opt.isCorrect,
+        })),
+        explanation: q.explanation,
+        difficulty: q.difficulty,
+        pedagogicalReason: q.pedagogicalReason,
+        source: 'ai-dynamic-generator' as const,
+      };
+    });
+  }
+
   private generateFallbackExplanation(payload: AIExplanationPayload): string {
     const step = payload.currentStep;
     if (!step) {

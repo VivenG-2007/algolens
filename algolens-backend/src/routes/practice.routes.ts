@@ -250,6 +250,45 @@ router.get('/questions', async (req: Request, res: Response) => {
   });
 });
 
+// GET or POST /api/practice/quiz/generate - Generate 10 dynamic AI quiz questions
+router.all('/quiz/generate', async (req: Request, res: Response) => {
+  const userId = getAuthUserId(req);
+  const topic = (req.query.topic as string) || (req.body?.topic as string) || 'all';
+  const count = Number(req.query.count || req.body?.count || 10);
+  let level = (req.query.level as any) || (req.body?.level as any) || 'Adaptive';
+
+  if (userId && (!level || level === 'Adaptive')) {
+    try {
+      const user = await supabaseService.getUser(userId);
+      if (user?.skillLevel) {
+        level = user.skillLevel;
+      }
+    } catch {}
+  }
+
+  try {
+    const result = await aiService.generateDynamicQuiz({
+      count,
+      topic,
+      level,
+      userId: userId || undefined,
+    });
+
+    res.json({
+      success: true,
+      data: result.questions,
+      meta: {
+        total: result.questions.length,
+        topic: result.topic,
+        level: result.level,
+        generatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
 // GET or POST /api/practice/personalized - Generate AI question tailored to user level and learning gaps
 router.all('/personalized', async (req: Request, res: Response) => {
   const userId = getAuthUserId(req);

@@ -187,7 +187,7 @@ export default function VisualizerPage() {
         className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-dark-card border border-dark-border rounded-xl p-5 shadow-lg"
       >
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="text-xs font-mono uppercase px-2.5 py-0.5 rounded bg-brand-950 border border-brand-500/40 text-brand-300">
               {meta.category}
             </span>
@@ -211,11 +211,11 @@ export default function VisualizerPage() {
         </div>
 
         {/* Algorithm Quick Switcher & Actions */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <select
             value={algorithm}
             onChange={(e) => router.push(`/visualizer/${e.target.value}`)}
-            className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:border-brand-500 focus:outline-none"
+            className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:border-brand-500 focus:outline-none w-full sm:w-auto"
           >
             {Object.values(STATIC_ALGORITHMS).map((a) => (
               <option key={a.id} value={a.id}>

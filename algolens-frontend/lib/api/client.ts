@@ -201,6 +201,28 @@ class ApiClient {
     return { question: res.data, studentContext: res.studentContext };
   }
 
+  public async generateDynamicAiQuiz(params?: {
+    topic?: string;
+    level?: string;
+    userId?: string;
+    count?: number;
+  }): Promise<{ questions: QuizQuestion[]; meta: { total: number; topic: string; level: string } }> {
+    const res = await this.request<{
+      success: boolean;
+      data: QuizQuestion[];
+      meta: { total: number; topic: string; level: string };
+    }>('/api/practice/quiz/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        topic: params?.topic || 'all',
+        level: params?.level || 'Adaptive',
+        count: params?.count || 10,
+        userId: params?.userId,
+      }),
+    });
+    return { questions: res.data, meta: res.meta };
+  }
+
   public async submitPracticeAttempt(
     questionId: string,
     selectedOption: string,
